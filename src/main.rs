@@ -1,5 +1,6 @@
 mod rawsocket {
     pub mod header_ip;
+    pub mod header_tcp;
 }
 
 fn add(a: i32, b: i32) -> i32 {

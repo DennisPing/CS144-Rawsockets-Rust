@@ -4,9 +4,9 @@ use std::net::Ipv4Addr;
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq)]
     struct IPFlags: u16 {
-        const RF = 0b1000000000000000; // Reserved Flag
-        const DF = 0b0100000000000000; // Don't Fragment
-        const MF = 0b0010000000000000; // More Fragments
+        const RF = 0b1000_0000_0000_0000; // Reserved Flag
+        const DF = 0b0100_0000_0000_0000; // Don't Fragment
+        const MF = 0b0010_0000_0000_0000; // More Fragments
     }
 }
 
@@ -25,7 +25,7 @@ impl IPFlags {
 }
 
 #[derive(Debug, Copy, Clone)]
-struct IPHeader {
+pub struct IPHeader {
     version: u8, // Always 4
     ihl: u8,     // Always 5 since we have no options
     tos: u8,     // Always 0 when we send out, can be 8 when receiving from server
@@ -41,9 +41,9 @@ struct IPHeader {
 }
 
 impl IPHeader {
-    /// Convert the IPHeader to a byte array.
     fn to_bytes(&self) -> [u8; 20] {
         let mut buf = [0u8; 20];
+
         buf[0] = (self.version << 4) | self.ihl;
         buf[1] = self.tos;
         buf[2..4].copy_from_slice(&self.tot_len.to_be_bytes());
@@ -57,26 +57,27 @@ impl IPHeader {
         buf[16..20].copy_from_slice(&self.dst_ip.octets());
         let checksum = Self::checksum(&buf);
         buf[10..12].copy_from_slice(&checksum.to_be_bytes());
+
         buf
     }
 
-    fn from_bytes(packet: &[u8]) -> Result<Self, &'static str> {
-        if packet.len() < 20 {
-            return Err("Packet is too short for IPv4 header");
+    fn from_bytes(data: &[u8]) -> Result<Self, &'static str> {
+        if data.len() < 20 {
+            return Err("Not enough bytes to parse IP header");
         }
 
-        let version = packet[0] >> 4;
-        let ihl = packet[0] & 0x0f;
-        let tos = packet[1];
-        let tot_len = u16::from_be_bytes([packet[2], packet[3]]);
-        let id = u16::from_be_bytes([packet[4], packet[5]]);
-        let combo_flags = u16::from_be_bytes([packet[6], packet[7]]);
+        let version = data[0] >> 4;
+        let ihl = data[0] & 0x0f;
+        let tos = data[1];
+        let tot_len = u16::from_be_bytes([data[2], data[3]]);
+        let id = u16::from_be_bytes([data[4], data[5]]);
+        let combo_flags = u16::from_be_bytes([data[6], data[7]]);
         let (flags, frag_offset) = IPFlags::unpack(combo_flags);
-        let ttl = packet[8];
-        let protocol = packet[9];
-        let checksum = u16::from_be_bytes([packet[10], packet[11]]);
-        let src_ip = Ipv4Addr::new(packet[12], packet[13], packet[14], packet[15]);
-        let dst_ip = Ipv4Addr::new(packet[16], packet[17], packet[18], packet[19]);
+        let ttl = data[8];
+        let protocol = data[9];
+        let checksum = u16::from_be_bytes([data[10], data[11]]);
+        let src_ip = Ipv4Addr::new(data[12], data[13], data[14], data[15]);
+        let dst_ip = Ipv4Addr::new(data[16], data[17], data[18], data[19]);
 
         Ok(Self {
             version,
