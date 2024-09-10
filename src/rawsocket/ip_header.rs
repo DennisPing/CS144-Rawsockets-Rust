@@ -3,7 +3,7 @@ use std::net::Ipv4Addr;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq)]
-    struct IPFlags: u16 {
+    pub struct IPFlags: u16 {
         const RF = 0b1000_0000_0000_0000; // Reserved Flag
         const DF = 0b0100_0000_0000_0000; // Don't Fragment
         const MF = 0b0010_0000_0000_0000; // More Fragments
@@ -24,24 +24,24 @@ impl IPFlags {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct IPHeader {
-    version: u8, // Always 4
-    ihl: u8,     // Always 5 since we have no options
-    tos: u8,     // Always 0 when we send out, can be 8 when receiving from server
-    tot_len: u16,
-    id: u16,
-    flags: IPFlags,   // 3 bits, part of u16
-    frag_offset: u16, // 13 bits, part of u16
-    ttl: u8,          // Always 64 when we send out
-    protocol: u8,     // Always 6 for TCP
+    pub version: u8, // Always 4
+    pub ihl: u8,     // Always 5 since we have no options
+    pub tos: u8,     // Always 0 when we send out, can be 8 when receiving from server
+    pub tot_len: u16,
+    pub id: u16,
+    pub flags: IPFlags,   // 3 bits, part of u16
+    pub frag_offset: u16, // 13 bits, part of u16
+    pub ttl: u8,          // Always 64 when we send out
+    pub protocol: u8,     // Always 6 for TCP
     checksum: u16,
-    src_ip: Ipv4Addr,
-    dst_ip: Ipv4Addr,
+    pub src_ip: Ipv4Addr,
+    pub dst_ip: Ipv4Addr,
 }
 
 impl IPHeader {
-    fn to_bytes(&self) -> [u8; 20] {
+    pub fn to_bytes(&self) -> [u8; 20] {
         let mut buf = [0u8; 20];
 
         buf[0] = (self.version << 4) | self.ihl;
@@ -61,7 +61,7 @@ impl IPHeader {
         buf
     }
 
-    fn from_bytes(data: &[u8]) -> Result<Self, &'static str> {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, &'static str> {
         if data.len() < 20 {
             return Err("Not enough bytes to parse IP header");
         }
@@ -115,7 +115,18 @@ impl IPHeader {
 
 #[cfg(test)]
 mod tests {
+    use crate::rawsocket::test_utils;
     use super::*;
+
+    #[test]
+    fn test_ip_flags() {
+        assert_eq!(IPFlags::RF.bits(), 0b1000000000000000);
+        assert_eq!(IPFlags::DF.bits(), 0b0100000000000000);
+        assert_eq!(IPFlags::MF.bits(), 0b0010000000000000);
+
+        let combined = IPFlags::RF | IPFlags::DF | IPFlags::MF;
+        assert_eq!(combined.bits(), 0b1110000000000000);
+    }
 
     #[test]
     fn test_ip_header_to_bytes() {
@@ -134,44 +145,32 @@ mod tests {
             dst_ip: Ipv4Addr::new(204, 44, 192, 60),
         };
 
-        let packet = header.to_bytes();
+        let data = header.to_bytes();
 
         // Verify that checksum is 0
-        let checksum = IPHeader::checksum(&packet);
+        let checksum = IPHeader::checksum(&data);
         assert_eq!(checksum, 0);
 
-        let wireshark_hex = "45000040000040004006d3760a6ed06acc2cc03c";
-        let wireshark_bytes = hex::decode(wireshark_hex).unwrap();
-        assert_eq!(packet, wireshark_bytes.as_slice());
+        let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
+        assert_eq!(data, ip_bytes.as_slice());
     }
 
     #[test]
     fn test_ip_header_from_bytes() {
-        let wireshark_hex = "45000040000040004006d3760a6ed06acc2cc03c";
-        let wireshark_bytes = hex::decode(wireshark_hex).unwrap();
-        let header = IPHeader::from_bytes(&wireshark_bytes).unwrap();
+        let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
+        let ip_header = IPHeader::from_bytes(&ip_bytes).unwrap();
 
-        assert_eq!(header.version, 4);
-        assert_eq!(header.ihl, 5);
-        assert_eq!(header.tos, 0);
-        assert_eq!(header.tot_len, 64);
-        assert_eq!(header.id, 0);
-        assert_eq!(header.flags, IPFlags::DF);
-        assert_eq!(header.frag_offset, 0);
-        assert_eq!(header.ttl, 64);
-        assert_eq!(header.protocol, 6);
-        assert_eq!(header.checksum, 54134);
-        assert_eq!(header.src_ip, Ipv4Addr::new(10, 110, 208, 106));
-        assert_eq!(header.dst_ip, Ipv4Addr::new(204, 44, 192, 60));
-    }
-
-    #[test]
-    fn test_ip_flags() {
-        assert_eq!(IPFlags::RF.bits(), 0b1000000000000000);
-        assert_eq!(IPFlags::DF.bits(), 0b0100000000000000);
-        assert_eq!(IPFlags::MF.bits(), 0b0010000000000000);
-
-        let combined = IPFlags::RF | IPFlags::DF | IPFlags::MF;
-        assert_eq!(combined.bits(), 0b1110000000000000);
+        assert_eq!(ip_header.version, 4);
+        assert_eq!(ip_header.ihl, 5);
+        assert_eq!(ip_header.tos, 0);
+        assert_eq!(ip_header.tot_len, 64);
+        assert_eq!(ip_header.id, 0);
+        assert_eq!(ip_header.flags, IPFlags::DF);
+        assert_eq!(ip_header.frag_offset, 0);
+        assert_eq!(ip_header.ttl, 64);
+        assert_eq!(ip_header.protocol, 6);
+        assert_eq!(ip_header.checksum, 54134);
+        assert_eq!(ip_header.src_ip, Ipv4Addr::new(10, 110, 208, 106));
+        assert_eq!(ip_header.dst_ip, Ipv4Addr::new(204, 44, 192, 60));
     }
 }
