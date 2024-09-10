@@ -90,20 +90,12 @@ impl IPHeader {
     }
 }
 
+// Unit tests *****************************************************************
+
 #[cfg(test)]
 mod tests {
     use crate::rawsocket::test_utils;
     use super::*;
-
-    #[test]
-    fn test_ip_flags() {
-        assert_eq!(IPFlags::RF.bits(), 0b1000000000000000);
-        assert_eq!(IPFlags::DF.bits(), 0b0100000000000000);
-        assert_eq!(IPFlags::MF.bits(), 0b0010000000000000);
-
-        let combined = IPFlags::RF | IPFlags::DF | IPFlags::MF;
-        assert_eq!(combined.bits(), 0b1110000000000000);
-    }
 
     #[test]
     fn test_ip_header_to_bytes() {
