@@ -1,11 +1,12 @@
 use bitflags::bitflags;
 
 bitflags! {
+    // Bit positions [ RF, DF, MF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct IPFlags: u16 {
-        const RF = 0b1000000000000000; // Reserved Flag
-        const DF = 0b0100000000000000; // Don't Fragment
-        const MF = 0b0010000000000000; // More Fragments
+        const RF = 1 << 15; // Reserved Flag
+        const DF = 1 << 14; // Don't Fragment
+        const MF = 1 << 13; // More Fragments
     }
 }
 

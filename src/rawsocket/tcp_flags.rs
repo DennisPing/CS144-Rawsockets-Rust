@@ -1,16 +1,17 @@
 use bitflags::bitflags;
 
 bitflags! {
+    // Bit positions [ CWR, ECE, URG, ACK, PSH, RST, SYN, FIN ]
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct TCPFlags: u8 {
-        const CWR = 0b10000000;
-        const ECE = 0b01000000;
-        const URG = 0b00100000;
-        const ACK = 0b00010000;
-        const PSH = 0b00001000;
-        const RST = 0b00000100;
-        const SYN = 0b00000010;
-        const FIN = 0b00000001;
+        const CWR = 1 << 7;
+        const ECE = 1 << 6;
+        const URG = 1 << 5;
+        const ACK = 1 << 4;
+        const PSH = 1 << 3;
+        const RST = 1 << 2;
+        const SYN = 1 << 1;
+        const FIN = 1 << 0;
     }
 }
 
