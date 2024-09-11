@@ -1,9 +1,9 @@
-use std::net::Ipv4Addr;
 use crate::rawsocket::ip_flags::IPFlags;
+use std::net::Ipv4Addr;
 
 #[derive(Debug, Clone)]
 pub struct IPHeader {
-    pub version: u8, // Always 4
+    pub version: u8, // Always 4 for IPv4
     pub ihl: u8,     // Always 5 since we have no options
     pub tos: u8,     // Always 0 when we send out, can be 8 when receiving from server
     pub tot_len: u16,
@@ -12,14 +12,15 @@ pub struct IPHeader {
     pub frag_offset: u16, // 13 bits, part of u16
     pub ttl: u8,          // Always 64 when we send out
     pub protocol: u8,     // Always 6 for TCP
-    checksum: u16,
+    pub checksum: u16,
     pub src_ip: Ipv4Addr,
     pub dst_ip: Ipv4Addr,
 }
 
 impl IPHeader {
-    pub fn to_bytes(&self) -> [u8; 20] {
-        let mut buf = [0u8; 20];
+    /// Convert an `IPHeader` into a byte array of size 20.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = vec![0u8; 20];
 
         buf[0] = (self.version << 4) | self.ihl;
         buf[1] = self.tos;
@@ -38,6 +39,7 @@ impl IPHeader {
         buf
     }
 
+    /// Convert a byte array into an `IPHeader`.
     pub fn from_bytes(data: &[u8]) -> Result<Self, &'static str> {
         if data.len() < 20 {
             return Err("Not enough bytes to parse IP header");
@@ -72,9 +74,9 @@ impl IPHeader {
         })
     }
 
-    /// Compute the checksum for an IPv4 header.
+    /// Compute the checksum for an `IPHeader` (Ipv4).
     /// Wiki: https://en.wikipedia.org/wiki/IPv4_header_checksum.
-    fn checksum(data: &[u8]) -> u16 {
+    pub fn checksum(data: &[u8]) -> u16 {
         // Sum every 2 bytes as a 16-bit value
         let mut sum: u32 = data
             .chunks(2)
@@ -82,7 +84,7 @@ impl IPHeader {
             .sum();
 
         // Fold the carry bits
-        while sum > 0xffff {
+        while sum >> 16 != 0 {
             sum = (sum & 0xffff) + (sum >> 16);
         }
 
@@ -90,12 +92,12 @@ impl IPHeader {
     }
 }
 
-// Unit tests *****************************************************************
+// -- Unit tests --
 
 #[cfg(test)]
 mod tests {
-    use crate::rawsocket::test_utils;
     use super::*;
+    use crate::rawsocket::test_utils;
 
     #[test]
     fn test_ip_header_to_bytes() {

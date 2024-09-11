@@ -3,9 +3,9 @@ use bitflags::bitflags;
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct IPFlags: u16 {
-        const RF = 0b1000_0000_0000_0000; // Reserved Flag
-        const DF = 0b0100_0000_0000_0000; // Don't Fragment
-        const MF = 0b0010_0000_0000_0000; // More Fragments
+        const RF = 0b1000000000000000; // Reserved Flag
+        const DF = 0b0100000000000000; // Don't Fragment
+        const MF = 0b0010000000000000; // More Fragments
     }
 }
 
@@ -23,7 +23,7 @@ impl IPFlags {
     }
 }
 
-// Unit tests *****************************************************************
+// -- Unit tests --
 
 #[test]
 fn test_ip_flags() {

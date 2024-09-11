@@ -1,26 +1,27 @@
-use std::vec;
 use crate::rawsocket::ip_header::IPHeader;
 use crate::rawsocket::tcp_flags::TCPFlags;
+use std::vec;
 
 #[derive(Debug, Clone)]
-struct TCPHeader {
-    src_port: u16,
-    dst_port: u16,
-    seq_num: u32,
-    ack_num: u32,
-    data_offset: u8, // Upper 4 bits
-    reserved: u8,    // Lower 4 bits
-    flags: TCPFlags,
-    window: u16,
-    checksum: u16,
-    urgent: u16,
-    options: Vec<u8>,
+pub struct TCPHeader {
+    pub src_port: u16,
+    pub dst_port: u16,
+    pub seq_num: u32,
+    pub ack_num: u32,
+    pub data_offset: u8, // Upper 4 bits
+    pub reserved: u8,    // Lower 4 bits
+    pub flags: TCPFlags,
+    pub window: u16,
+    pub checksum: u16,
+    pub urgent: u16,
+    pub options: Vec<u8>,
 }
 
 impl TCPHeader {
-    fn to_bytes(&self, ip: &IPHeader, payload: &[u8]) -> Vec<u8> {
+    /// Convert a `TCPHeader` into a byte vector.
+    pub fn to_bytes(&self, ip: &IPHeader, payload: &[u8]) -> Vec<u8> {
         let header_len = self.data_offset as usize * 4;
-        let mut buf = vec![0u8; header_len + payload.len()];
+        let mut buf = vec![0u8; header_len];
 
         buf[0..2].copy_from_slice(&self.src_port.to_be_bytes());
         buf[2..4].copy_from_slice(&self.dst_port.to_be_bytes());
@@ -29,17 +30,17 @@ impl TCPHeader {
         buf[12] = (self.data_offset << 4) | self.reserved;
         buf[13] = self.flags.bits();
         buf[14..16].copy_from_slice(&self.window.to_be_bytes());
-        buf[16..18].copy_from_slice(&[0, 0]);
+        // Let 16..18 be 0 checksum
         buf[18..20].copy_from_slice(&self.urgent.to_be_bytes());
         buf[20..20 + self.options.len()].copy_from_slice(&self.options);
-        buf[header_len..].copy_from_slice(payload);
         let checksum = Self::checksum(&buf, ip, payload);
         buf[16..18].copy_from_slice(&checksum.to_be_bytes());
 
         buf
     }
 
-    fn from_bytes(data: &[u8]) -> Result<Self, &'static str> {
+    /// Convert a byte vector into a `TCPHeader`.
+    pub fn from_bytes(data: &[u8]) -> Result<Self, &'static str> {
         if data.len() < 20 {
             return Err("Not enough bytes to parse TCP header");
         }
@@ -71,7 +72,8 @@ impl TCPHeader {
         })
     }
 
-    fn checksum(tcp_bytes: &[u8], ip: &IPHeader, payload: &[u8]) -> u16 {
+    /// Compute the checksum for a `TCPHeader`.
+    pub fn checksum(tcp_bytes: &[u8], ip: &IPHeader, payload: &[u8]) -> u16 {
         let mut sum = 0u32;
 
         // Add source IP to pseudo header
@@ -91,7 +93,7 @@ impl TCPHeader {
         // Sum the TCP Header
         for i in (0..tcp_bytes.len()).step_by(2) {
             if i + 1 < tcp_bytes.len() {
-                sum += ((tcp_bytes[i] as u32) << 8) | (tcp_bytes[i+1] as u32);
+                sum += ((tcp_bytes[i] as u32) << 8) | (tcp_bytes[i + 1] as u32);
             } else {
                 sum += (tcp_bytes[i] as u32) << 8;
             }
@@ -100,7 +102,7 @@ impl TCPHeader {
         // Sum the payload
         for i in (0..payload.len()).step_by(2) {
             if i + 1 < payload.len() {
-                sum += ((payload[i] as u32) << 8) | (payload[i+1] as u32);
+                sum += ((payload[i] as u32) << 8) | (payload[i + 1] as u32);
             } else {
                 sum += (payload[i] as u32) << 8;
             }
@@ -115,13 +117,13 @@ impl TCPHeader {
     }
 }
 
-// Unit tests *****************************************************************
+// -- Unit tests --
 
 #[cfg(test)]
 mod tests {
-    use crate::rawsocket::test_utils;
     use super::*;
-    
+    use crate::rawsocket::test_utils;
+
     #[test]
     fn test_tcp_header_to_bytes() {
         let tcp_header = TCPHeader {
@@ -167,8 +169,9 @@ mod tests {
         assert_eq!(tcp_header.window, 65535);
         assert_eq!(tcp_header.checksum, 37527);
         assert_eq!(tcp_header.urgent, 0);
-        assert_eq!(tcp_header.options, hex::decode("020405b4010303060101080abb6879f80000000004020000").unwrap());
+        assert_eq!(
+            tcp_header.options,
+            hex::decode("020405b4010303060101080abb6879f80000000004020000").unwrap()
+        );
     }
-    
-    
 }
