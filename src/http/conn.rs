@@ -1,7 +1,6 @@
-use crate::net;
-use crate::net::ip_flags::IPFlags;
-use crate::net::tcp_flags::TCPFlags;
-use crate::net::{ip_header, rawsocket, tcp_header};
+use crate::net::header;
+use crate::net::rawsocket;
+use crate::net::{IPFlags, IPHeader, TCPFlags, TCPHeader};
 use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
 use nix::sys::socket::SockProtocol;
 use rand::rngs::ThreadRng;
@@ -84,7 +83,7 @@ impl Conn {
         let data_offset = (5 + tcp_options.len()) / 4;
         let total_len = 20 + data_offset * 4 + payload.len();
 
-        let iph = ip_header::IPHeader {
+        let iph = IPHeader {
             version: 4,
             ihl: 5,
             tos: 0,
@@ -99,7 +98,7 @@ impl Conn {
             dst_ip: *self.remote_addr.ip(),
         };
 
-        let tcph = tcp_header::TCPHeader {
+        let tcph = TCPHeader {
             src_port: self.local_addr.port(),
             dst_port: self.remote_addr.port(),
             seq_num,
@@ -114,7 +113,7 @@ impl Conn {
             payload: payload.to_vec(),
         };
 
-        net::pack(&iph, &tcph)
+        header::pack(&iph, &tcph)
     }
 
     /// Resolve hostname to an IPv4 address.
