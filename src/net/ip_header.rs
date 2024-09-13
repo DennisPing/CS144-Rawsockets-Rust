@@ -1,4 +1,4 @@
-use crate::rawsocket::ip_flags::IPFlags;
+use crate::net::ip_flags::IPFlags;
 use std::net::Ipv4Addr;
 
 #[derive(Debug, Clone)]
@@ -6,7 +6,7 @@ pub struct IPHeader {
     pub version: u8, // Always 4 for IPv4
     pub ihl: u8,     // Always 5 since we have no options
     pub tos: u8,     // Always 0 when we send out, can be 8 when receiving from server
-    pub tot_len: u16,
+    pub total_len: u16,
     pub id: u16,
     pub flags: IPFlags,   // 3 bits, part of u16
     pub frag_offset: u16, // 13 bits, part of u16
@@ -24,7 +24,7 @@ impl IPHeader {
 
         buf[0] = (self.version << 4) | self.ihl;
         buf[1] = self.tos;
-        buf[2..4].copy_from_slice(&self.tot_len.to_be_bytes());
+        buf[2..4].copy_from_slice(&self.total_len.to_be_bytes());
         buf[4..6].copy_from_slice(&self.id.to_be_bytes());
         let flags = self.flags.pack(self.frag_offset);
         buf[6..8].copy_from_slice(&flags.to_be_bytes());
@@ -62,7 +62,7 @@ impl IPHeader {
             version,
             ihl,
             tos,
-            tot_len,
+            total_len: tot_len,
             id,
             flags,
             frag_offset,
@@ -97,7 +97,7 @@ impl IPHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rawsocket::test_utils;
+    use crate::net::test_utils;
 
     #[test]
     fn test_ip_header_to_bytes() {
@@ -105,7 +105,7 @@ mod tests {
             version: 4,
             ihl: 5,
             tos: 0,
-            tot_len: 64,
+            total_len: 64,
             id: 0,
             flags: IPFlags::DF,
             frag_offset: 0,
@@ -129,19 +129,19 @@ mod tests {
     #[test]
     fn test_ip_header_from_bytes() {
         let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
-        let ip_header = IPHeader::from_bytes(&ip_bytes).unwrap();
+        let iph = IPHeader::from_bytes(&ip_bytes).unwrap();
 
-        assert_eq!(ip_header.version, 4);
-        assert_eq!(ip_header.ihl, 5);
-        assert_eq!(ip_header.tos, 0);
-        assert_eq!(ip_header.tot_len, 64);
-        assert_eq!(ip_header.id, 0);
-        assert_eq!(ip_header.flags, IPFlags::DF);
-        assert_eq!(ip_header.frag_offset, 0);
-        assert_eq!(ip_header.ttl, 64);
-        assert_eq!(ip_header.protocol, 6);
-        assert_eq!(ip_header.checksum, 54134);
-        assert_eq!(ip_header.src_ip, Ipv4Addr::new(10, 110, 208, 106));
-        assert_eq!(ip_header.dst_ip, Ipv4Addr::new(204, 44, 192, 60));
+        assert_eq!(iph.version, 4);
+        assert_eq!(iph.ihl, 5);
+        assert_eq!(iph.tos, 0);
+        assert_eq!(iph.total_len, 64);
+        assert_eq!(iph.id, 0);
+        assert_eq!(iph.flags, IPFlags::DF);
+        assert_eq!(iph.frag_offset, 0);
+        assert_eq!(iph.ttl, 64);
+        assert_eq!(iph.protocol, 6);
+        assert_eq!(iph.checksum, 54134);
+        assert_eq!(iph.src_ip, Ipv4Addr::new(10, 110, 208, 106));
+        assert_eq!(iph.dst_ip, Ipv4Addr::new(204, 44, 192, 60));
     }
 }

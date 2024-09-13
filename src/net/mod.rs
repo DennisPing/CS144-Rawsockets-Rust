@@ -1,54 +1,43 @@
-use crate::rawsocket::ip_header::IPHeader;
-use crate::rawsocket::tcp_header::TCPHeader;
+use crate::net::ip_header::IPHeader;
+use crate::net::tcp_header::TCPHeader;
 
-mod ip_flags;
+pub mod ip_flags;
 pub mod ip_header;
-pub mod socket;
-mod tcp_flags;
+pub mod rawsocket;
+pub mod tcp_flags;
 pub mod tcp_header;
 
-// -- Public interface for rawsocket --
+// -- Public interface for net --
 
-pub fn pack(ip: &mut IPHeader, tcp: &TCPHeader, payload: &Vec<u8>) -> Vec<u8> {
-    // Calculate total length of packet [IP header + TCP header + payload]
-    let tcp_header_len = tcp.data_offset as usize * 4;
-    ip.tot_len = (20 + tcp_header_len + payload.len()) as u16;
-
+pub fn pack(iph: &IPHeader, tcph: &TCPHeader) -> Vec<u8> {
     // Allocate entire vector
-    let mut packet = vec![0u8; ip.tot_len as usize];
+    let mut packet = vec![0u8; iph.total_len as usize];
 
-    // Copy IP header bytes into packet
-    packet[0..20].copy_from_slice(&ip.to_bytes());
-
-    // Copy TCP header bytes into packet
-    let payload_idx = 20 + tcp_header_len;
-    packet[20..payload_idx].copy_from_slice(&tcp.to_bytes(ip, payload));
-
-    // Copy payload into packet
-    packet[payload_idx..].copy_from_slice(payload);
-
+    packet[0..20].copy_from_slice(&iph.to_bytes());
+    packet[20..].copy_from_slice(&tcph.to_bytes(iph));
     packet
 }
 
-// pub fn unpack(packet: &[u8]) -> Result<(&IPHeader, &TCPHeader, &Vec<u8>), &'static str> {
-//     if packet.len() < 20 {
-//         return Err("Incomplete TCP/IP packet");
-//     }
-//
-//     let ip_header_bytes = &packet[0..20];
-//     if IPHeader::checksum(&ip_header_bytes) != 0 {
-//         return Err("IP checksum failed");
-//     }
-//
-//     let ip = IPHeader::from_bytes(ip_header_bytes);
-//
-//     let tcp_header_bytes = &packet[20..];
-//     if TCPHeader::checksum(tcp_header_bytes, &ip) != 0 {
-//         return Err("TCP checksum failed");
-//     }
-//
-//     let tcp = TCPHeader::from_bytes(&packet[20..]);
-// }
+pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), &'static str> {
+    if packet.len() < 20 {
+        return Err("Incomplete TCP/IP packet");
+    }
+
+    let iph_bytes = &packet[0..20];
+    if IPHeader::checksum(&iph_bytes) != 0 {
+        return Err("IP checksum failed");
+    }
+
+    let iph = IPHeader::from_bytes(iph_bytes)?;
+
+    let tcp_bytes = &packet[20..];
+    if TCPHeader::checksum(tcp_bytes, &iph) != 0 {
+        return Err("TCP checksum failed");
+    }
+
+    let tcph = TCPHeader::from_bytes(&tcp_bytes)?;
+    Ok((iph, tcph))
+}
 
 // -- Unit test helpers --
 
@@ -110,21 +99,22 @@ pub mod test_utils {
 
 mod tests {
     use super::*;
-    use crate::rawsocket::ip_flags::IPFlags;
-    use crate::rawsocket::tcp_flags::TCPFlags;
+    use crate::net::ip_flags::IPFlags;
+    use crate::net::tcp_flags::TCPFlags;
     use std::net::Ipv4Addr;
+    use test_utils::*;
 
     #[test]
     fn test_pack() {
-        let ip_bytes = hex::decode(test_utils::get_ip_hex_with_payload()).unwrap();
-        let tcp_bytes = hex::decode(test_utils::get_tcp_hex_with_payload()).unwrap();
-        let payload = hex::decode(test_utils::giant_payload()).unwrap();
+        let ip_bytes = hex::decode(get_ip_hex_with_payload()).unwrap();
+        let tcp_bytes = hex::decode(get_tcp_hex_with_payload()).unwrap();
+        let payload = hex::decode(giant_payload()).unwrap();
 
-        let mut ip = IPHeader {
+        let iph = IPHeader {
             version: 4,
             ihl: 5,
             tos: 0,
-            tot_len: 1426,
+            total_len: 1426,
             id: 17988,
             flags: IPFlags::DF,
             frag_offset: 0,
@@ -135,7 +125,7 @@ mod tests {
             dst_ip: Ipv4Addr::new(10, 110, 208, 106),
         };
 
-        let tcp = TCPHeader {
+        let tcph = TCPHeader {
             src_port: 80,
             dst_port: 50871,
             seq_num: 1654659911,
@@ -147,10 +137,52 @@ mod tests {
             checksum: 29098,
             urgent: 0,
             options: hex::decode("0101080abeb95f0abb687a45").unwrap(),
+            payload: payload.clone(),
         };
 
-        let packet = pack(&mut ip, &tcp, &payload);
+        let packet = pack(&iph, &tcph);
         let expected = [ip_bytes, tcp_bytes, payload].concat();
         assert_eq!(expected, packet);
+    }
+
+    #[test]
+    fn test_unpack() {
+        let ip_bytes = hex::decode(get_ip_hex_with_payload()).unwrap();
+        let tcp_bytes = hex::decode(get_tcp_hex_with_payload()).unwrap();
+        let payload = hex::decode(giant_payload()).unwrap();
+
+        let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
+        let result = unpack(&packet);
+        assert!(result.is_ok());
+        let (iph, tcph) = result.unwrap();
+
+        assert_eq!(iph.version, 4);
+        assert_eq!(iph.ihl, 5);
+        assert_eq!(iph.tos, 0);
+        assert_eq!(iph.total_len, 1426);
+        assert_eq!(iph.id, 17988);
+        assert_eq!(iph.flags, IPFlags::DF);
+        assert_eq!(iph.frag_offset, 0);
+        assert_eq!(iph.ttl, 42);
+        assert_eq!(iph.protocol, 6);
+        assert_eq!(iph.checksum, 40416);
+        assert_eq!(iph.src_ip, Ipv4Addr::new(204, 44, 192, 60));
+        assert_eq!(iph.dst_ip, Ipv4Addr::new(10, 110, 208, 106));
+
+        assert_eq!(tcph.src_port, 80);
+        assert_eq!(tcph.dst_port, 50871);
+        assert_eq!(tcph.seq_num, 1654659911);
+        assert_eq!(tcph.ack_num, 2753994376);
+        assert_eq!(tcph.data_offset, 8);
+        assert_eq!(tcph.reserved, 0);
+        assert_eq!(tcph.flags, TCPFlags::ACK);
+        assert_eq!(tcph.window, 235);
+        assert_eq!(tcph.checksum, 29098);
+        assert_eq!(tcph.urgent, 0);
+        assert_eq!(
+            tcph.options,
+            hex::decode("0101080abeb95f0abb687a45").unwrap()
+        );
+        assert_eq!(tcph.payload, payload)
     }
 }

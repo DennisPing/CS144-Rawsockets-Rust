@@ -1,5 +1,5 @@
-use crate::rawsocket::ip_header::IPHeader;
-use crate::rawsocket::tcp_flags::TCPFlags;
+use crate::net::ip_header::IPHeader;
+use crate::net::tcp_flags::TCPFlags;
 use std::vec;
 
 #[derive(Debug, Clone)]
@@ -15,13 +15,14 @@ pub struct TCPHeader {
     pub checksum: u16,
     pub urgent: u16,
     pub options: Vec<u8>,
+    pub payload: Vec<u8>, // Append payload to end of TCP header for ease of use
 }
 
 impl TCPHeader {
     /// Convert a `TCPHeader` into a byte vector.
-    pub fn to_bytes(&self, ip: &IPHeader, payload: &[u8]) -> Vec<u8> {
+    pub fn to_bytes(&self, ip: &IPHeader) -> Vec<u8> {
         let header_len = self.data_offset as usize * 4;
-        let mut buf = vec![0u8; header_len];
+        let mut buf = vec![0u8; header_len + self.payload.len()];
 
         buf[0..2].copy_from_slice(&self.src_port.to_be_bytes());
         buf[2..4].copy_from_slice(&self.dst_port.to_be_bytes());
@@ -30,10 +31,12 @@ impl TCPHeader {
         buf[12] = (self.data_offset << 4) | self.reserved;
         buf[13] = self.flags.bits();
         buf[14..16].copy_from_slice(&self.window.to_be_bytes());
-        // Let 16..18 be 0 checksum
+        // leave 16..18 as zeros for checksum
         buf[18..20].copy_from_slice(&self.urgent.to_be_bytes());
         buf[20..20 + self.options.len()].copy_from_slice(&self.options);
-        let checksum = Self::checksum(&buf, ip, payload);
+        buf[header_len..].copy_from_slice(&self.payload);
+
+        let checksum = Self::checksum(&buf, ip);
         buf[16..18].copy_from_slice(&checksum.to_be_bytes());
 
         buf
@@ -55,7 +58,10 @@ impl TCPHeader {
         let window = u16::from_be_bytes([data[14], data[15]]);
         let checksum = u16::from_be_bytes([data[16], data[17]]);
         let urgent = u16::from_be_bytes([data[18], data[19]]);
-        let options = data[20..(data_offset as usize * 4)].to_vec();
+
+        let header_len = data_offset as usize * 4;
+        let options = data[20..header_len].to_vec();
+        let payload = data[header_len..].to_vec();
 
         Ok(Self {
             src_port,
@@ -69,43 +75,36 @@ impl TCPHeader {
             checksum,
             urgent,
             options,
+            payload,
         })
     }
 
     /// Compute the checksum for a `TCPHeader`.
-    pub fn checksum(tcp_bytes: &[u8], ip: &IPHeader, payload: &[u8]) -> u16 {
+    pub fn checksum(tcp_bytes: &[u8], iph: &IPHeader) -> u16 {
         let mut sum = 0u32;
 
         // Add source IP to pseudo header
-        let src_bytes = ip.src_ip.octets();
+        let src_bytes = iph.src_ip.octets();
         sum += ((src_bytes[0] as u32) << 8) | (src_bytes[1] as u32);
         sum += ((src_bytes[2] as u32) << 8) | (src_bytes[3] as u32);
 
         // Add destination IP to pseudo header
-        let dst_bytes = ip.dst_ip.octets();
+        let dst_bytes = iph.dst_ip.octets();
         sum += ((dst_bytes[0] as u32) << 8) | (dst_bytes[1] as u32);
         sum += ((dst_bytes[2] as u32) << 8) | (dst_bytes[3] as u32);
 
         // Add protocol and segment length
-        sum += ip.protocol as u32;
-        sum += (tcp_bytes.len() + payload.len()) as u32;
+        sum += iph.protocol as u32;
+        sum += (tcp_bytes.len()) as u32;
 
-        // Sum the TCP Header
+        // Sum the TCP Header and payload
         for i in (0..tcp_bytes.len()).step_by(2) {
-            if i + 1 < tcp_bytes.len() {
-                sum += ((tcp_bytes[i] as u32) << 8) | (tcp_bytes[i + 1] as u32);
-            } else {
-                sum += (tcp_bytes[i] as u32) << 8;
-            }
+            sum += ((tcp_bytes[i] as u32) << 8) | (tcp_bytes[i + 1] as u32);
         }
 
-        // Sum the payload
-        for i in (0..payload.len()).step_by(2) {
-            if i + 1 < payload.len() {
-                sum += ((payload[i] as u32) << 8) | (payload[i + 1] as u32);
-            } else {
-                sum += (payload[i] as u32) << 8;
-            }
+        // If odd length, add the last byte
+        if tcp_bytes.len() % 2 != 0 {
+            sum += (tcp_bytes[tcp_bytes.len() - 1] as u32) << 8;
         }
 
         // Fold the carry bits
@@ -122,7 +121,7 @@ impl TCPHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rawsocket::test_utils;
+    use crate::net::test_utils;
 
     #[test]
     fn test_tcp_header_to_bytes() {
@@ -138,15 +137,16 @@ mod tests {
             checksum: 37527,
             urgent: 0,
             options: hex::decode("020405b4010303060101080abb6879f80000000004020000").unwrap(),
+            payload: vec![],
         };
 
         // Get the IP header in order to build TCP header
         let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
-        let ip_header = IPHeader::from_bytes(ip_bytes.as_slice()).unwrap();
-        let data = tcp_header.to_bytes(&ip_header, &[]);
+        let iph = IPHeader::from_bytes(ip_bytes.as_slice()).unwrap();
+        let data = tcp_header.to_bytes(&iph);
 
         // Verify that checksum is 0
-        let checksum = TCPHeader::checksum(&data, &ip_header, &[]);
+        let checksum = TCPHeader::checksum(&data, &iph);
         assert_eq!(checksum, 0);
 
         // Check that constructed data is equal to wireshark data
@@ -157,21 +157,22 @@ mod tests {
     #[test]
     fn test_tcp_header_from_bytes() {
         let tcp_bytes = hex::decode(test_utils::get_tcp_hex()).unwrap();
-        let tcp_header = TCPHeader::from_bytes(&tcp_bytes).unwrap();
+        let tcph = TCPHeader::from_bytes(&tcp_bytes).unwrap();
 
-        assert_eq!(tcp_header.src_port, 50871);
-        assert_eq!(tcp_header.dst_port, 80);
-        assert_eq!(tcp_header.seq_num, 2753993875);
-        assert_eq!(tcp_header.ack_num, 0);
-        assert_eq!(tcp_header.data_offset, 11);
-        assert_eq!(tcp_header.reserved, 0);
-        assert_eq!(tcp_header.flags, TCPFlags::SYN);
-        assert_eq!(tcp_header.window, 65535);
-        assert_eq!(tcp_header.checksum, 37527);
-        assert_eq!(tcp_header.urgent, 0);
+        assert_eq!(tcph.src_port, 50871);
+        assert_eq!(tcph.dst_port, 80);
+        assert_eq!(tcph.seq_num, 2753993875);
+        assert_eq!(tcph.ack_num, 0);
+        assert_eq!(tcph.data_offset, 11);
+        assert_eq!(tcph.reserved, 0);
+        assert_eq!(tcph.flags, TCPFlags::SYN);
+        assert_eq!(tcph.window, 65535);
+        assert_eq!(tcph.checksum, 37527);
+        assert_eq!(tcph.urgent, 0);
         assert_eq!(
-            tcp_header.options,
+            tcph.options,
             hex::decode("020405b4010303060101080abb6879f80000000004020000").unwrap()
         );
+        assert_eq!(tcph.payload, &[])
     }
 }

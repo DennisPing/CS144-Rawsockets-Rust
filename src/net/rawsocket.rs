@@ -32,9 +32,9 @@ pub fn new_recv_socket(protocol: SockProtocol) -> Result<OwnedFd, Errno> {
 }
 
 /// Set the receive timeout of a raw socket.
-pub fn set_timeout(fd: OwnedFd, duration: Duration) -> Result<(), Errno> {
+pub fn set_timeout(fd: &OwnedFd, duration: Duration) -> Result<(), Errno> {
     let timeout = TimeVal::seconds(duration.as_secs() as i64)
-        + TimeVal::microseconds(duration.as_secs() as i64);
+        + TimeVal::microseconds(duration.subsec_micros() as i64);
     setsockopt(&fd, ReceiveTimeout, &timeout)?;
     Ok(())
 }
