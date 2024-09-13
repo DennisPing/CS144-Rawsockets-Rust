@@ -14,6 +14,7 @@ pub use tcp_header::TCPHeader;
 
 // -- Unit test helpers --
 
+#[cfg(test)]
 pub mod test_utils {
     pub fn get_ip_hex() -> &'static str {
         "45000040000040004006d3760a6ed06acc2cc03c"

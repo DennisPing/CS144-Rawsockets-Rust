@@ -34,6 +34,7 @@ pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), &'static str> {
 
 // -- Unit tests --
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::net::ip_flags::IPFlags;
