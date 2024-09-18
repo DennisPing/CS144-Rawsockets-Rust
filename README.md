@@ -6,9 +6,9 @@
 ## Overview
 
 An HTTP/1 and HTTP/2 Cleartext (H2C) implementation on top of a custom TCP/IP network stack implementation based on the
-[Stanford CS144](https://cs144.github.io/) `libsponge` library.
+[Stanford CS144](https://cs144.github.io/) `libsponge` library. The transport layer uses raw sockets.
 
-The transport layer is manually managed via raw sockets.
+Done for self-learning purposes.
 
 | OSI Layer             | Description                 | Implemented |
 |-----------------------|-----------------------------|-------------|
@@ -24,7 +24,6 @@ The transport layer is manually managed via raw sockets.
 
 - Linux
 - Minimum supported Rust version (MSRV): 1.69
--
 
 ## Required System Changes
 
