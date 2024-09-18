@@ -1,5 +1,8 @@
 # TCP-IP-Raw-Sockets-Rust
 
+![Build Status](https://github.com/DennisPing/TCP-IP-Raw-Sockets-Rust/actions/workflows/rust.yml/badge.svg)
+![Coverage](https://img.shields.io/badge/coverage-50%25-yellow)
+
 ## Overview
 
 An HTTP/1 and HTTP/2 Cleartext (H2C) implementation on top of a custom TCP/IP network stack implementation based on the
