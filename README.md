@@ -57,7 +57,7 @@ cargo build --release
 ## How to Run
 
 ```bash
-sudo ./target/release/rawhttpget
+sudo ./target/release/rawhttpget [http://exampleurl.com]
 ```
 
 ## Run Unit Tests
