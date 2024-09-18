@@ -1,32 +1,32 @@
+use crate::conn::tcp_receiver::TCPReceiver;
 use crate::net::header;
 use crate::net::rawsocket;
 use crate::net::{IPFlags, IPHeader, TCPFlags, TCPHeader};
 use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
+use nix::errno::Errno;
 use nix::sys::socket::SockProtocol;
+use nix::unistd::read;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::io::{Error, ErrorKind};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
-use std::os::fd::OwnedFd;
+use std::num::Wrapping;
+use std::os::fd::{AsRawFd, OwnedFd};
 use std::time::Duration;
 
 #[derive(Debug)]
-pub struct Conn {
+pub struct TcpConn {
     pub hostname: String,
     pub local_addr: SocketAddrV4,
     pub remote_addr: SocketAddrV4,
-    pub adv_window: u16,  // Advertised window
-    pub mss: u16,         // Max segment size
-    pub window_scale: u8, // Window scale
     pub send_fd: OwnedFd,
     pub recv_fd: OwnedFd,
-    initial_seq_num: u32, // The initial sequence number after connect()
-    initial_ack_num: u32, // The initial ack number after connect()
+    tcp_receiver: TCPReceiver,
     rng: ThreadRng,
 }
 
-impl Conn {
-    /// Set up a new Connection with the remote host. Does the 3-way handshake automatically.
+impl TcpConn {
+    /// Set up a new `TcpConn` with the remote host. Does the 3-way handshake automatically.
     pub fn new(hostname: String, timeout: Duration) -> Result<Self, Error> {
         let local_ip = Self::lookup_local_ip()?;
         let mut rng = rand::thread_rng();
@@ -40,17 +40,15 @@ impl Conn {
 
         rawsocket::set_timeout(&recv_fd, timeout)?;
 
+        let tcp_receiver = TCPReceiver::new(1024 * 1024 * 1);
+
         Ok(Self {
             hostname,
             local_addr,
             remote_addr,
-            adv_window: 65535,
-            mss: 1460,
-            window_scale: 4,
             send_fd,
             recv_fd,
-            initial_seq_num: 0,
-            initial_ack_num: 0,
+            tcp_receiver,
             rng,
         })
     }
@@ -70,6 +68,51 @@ impl Conn {
         tcp_flags: TCPFlags,
     ) -> Result<(), &'static str> {
         Ok(())
+    }
+
+    pub fn recv_data(&mut self) -> Result<Vec<u8>, Error> {
+        let mut buf = vec![0u8; 1500];
+        let recv_fd = self.recv_fd.as_raw_fd();
+
+        loop {
+            match read(recv_fd, &mut buf) {
+                Ok(n) => {
+                    buf.truncate(n);
+
+                    let (iph, tcph) = match header::unpack(&buf) {
+                        Ok(result) => result,
+                        Err(err) => {
+                            return Err(Error::new(ErrorKind::InvalidData, err.to_string()))
+                        }
+                    };
+
+                    if !iph.src_ip.eq(self.remote_addr.ip()) {
+                        return Err(Error::new(ErrorKind::Other, "mismatch ip address"));
+                    }
+
+                    let payload_len = tcph.payload.len();
+
+                    self.tcp_receiver.receive_segment(
+                        Wrapping(tcph.seq_num),
+                        tcph.payload,
+                        tcph.flags.contains(TCPFlags::SYN),
+                        tcph.flags.contains(TCPFlags::FIN),
+                    );
+
+                    let data = self.tcp_receiver.stream_out().peek(payload_len);
+                    return Ok(data);
+                }
+                Err(Errno::EINTR) => {
+                    continue; // Retry reading
+                }
+                Err(Errno::EAGAIN) | Err(Errno::EWOULDBLOCK) => {
+                    return Err(Error::new(ErrorKind::TimedOut, "timeout")); // Timeout or would-block
+                }
+                Err(e) => {
+                    return Err(Error::new(ErrorKind::Other, e.to_string()));
+                }
+            }
+        }
     }
 
     fn build_packet(
@@ -106,7 +149,7 @@ impl Conn {
             data_offset: data_offset as u8,
             reserved: 0,
             flags: tcp_flags,
-            window: self.adv_window,
+            window: 65500u16,
             checksum: 0,
             urgent: 0,
             options: tcp_options.to_vec(),
