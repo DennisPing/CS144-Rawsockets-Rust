@@ -8,6 +8,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Zinstrument-coverage"
+  LLVM_PROFILE_FILE: "coverage-%p-%m.profraw"
 
 jobs:
   build:
@@ -16,21 +18,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install Rust
+      # Install Rust (stable)
       - name: Install Rust
         run: rustup update stable
 
-      # Install cargo-llvm-cov
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+      # Install dependencies for grcov
+      - name: Install dependencies
+        run: sudo apt-get install -y llvm-tools gcc
 
-      # Run tests and generate coverage
+      # Run tests and generate coverage data
       - name: Run tests with coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: |
+          cargo clean
+          cargo build
+          cargo test --workspace --all-features
+          mkdir -p coverage
+          grcov . -s . --binary-path ./target/debug/ -t lcov --branch --ignore-not-existing --ignore "/*" -o coverage/lcov.info
 
-      # Upload coverage report
-      - name: Upload coverage to GitHub
-        uses: actions/upload-artifact@v4
+      # Upload coverage report to Codecov (using latest v4)
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
         with:
-          name: coverage-report
-          path: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-coverage
+          fail_ci_if_error: true
