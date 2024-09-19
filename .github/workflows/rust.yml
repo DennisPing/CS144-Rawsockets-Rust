@@ -8,45 +8,31 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: '0'
-  RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
-  RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the code
+      # Checkout code
       - uses: actions/checkout@v4
 
-      # Install Rust (nightly)
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+      # Install Rust (stable)
+      - name: Install Rust
+        run: rustup update stable
 
-      # Clean workspace to ensure fresh coverage datas
-      - name: Clean
-        run: cargo clean
+      # Install cargo-llvm-cov
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-      # Build the project
-      - name: Build
-        run: cargo build
-
-      # Run tests
-      - name: Run tests
-        run: cargo test
-
-      # Use grcov to generate coverage report
-      - name: rust-grcov
-        uses: actions-rs/grcov@v0.1
+      # Run tests and generate coverage report in Codecov format
+      - name: Generate code coverage
+        run: cargo llvm-cov --all-features --workspace --codecov --output-path codecov.json
 
       # Upload coverage report to Codecov
-      - name: Codecov
+      - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: codecov.json
           fail_ci_if_error: true
