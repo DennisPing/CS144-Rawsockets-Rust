@@ -8,41 +8,50 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-Zinstrument-coverage"
-  LLVM_PROFILE_FILE: "coverage-%p-%m.profraw"
+  CARGO_INCREMENTAL: '0'
+  RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+  RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout the code
       - uses: actions/checkout@v4
 
-      # Install Rust (stable)
-      - name: Install Rust
-        run: rustup update stable
-
-      # Install LLVM and Clang
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
+      # Install Rust (nightly)
+      - uses: actions-rs/toolchain@v1
         with:
-          version: "14.0"
+          toolchain: nightly
+          override: true
 
-      # Run tests and generate coverage data
-      - name: Run tests with coverage
-        run: |
-          cargo clean
-          cargo build
-          cargo test --workspace --all-features
-          mkdir -p coverage
-          grcov . -s . --binary-path ./target/debug/ -t lcov --branch --ignore-not-existing --ignore "/*" -o coverage/lcov.info
+      # Clean workspace
+      - name: Clean workspace
+        uses: actions-rs/cargo@v1
+        with:
+          command: clean
 
-      # Upload coverage report to Codecov (using latest v4)
-      - name: Upload coverage to Codecov
+      # Build the project
+      - name: Build
+        run: cargo build --verbose
+
+      # Run tests with coverage flags
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-features --no-fail-fast
+
+      # Use grcov to generate coverage report
+      - name: rust-grcov
+        uses: actions-rs/grcov@v0.1
+
+      # Upload coverage report to Codecov
+      - name: Codecov
         uses: codecov/codecov-action@v4
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
-          flags: unittests
-          name: codecov-coverage
+          verbose: true
           fail_ci_if_error: true
