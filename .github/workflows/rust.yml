@@ -22,9 +22,11 @@ jobs:
       - name: Install Rust
         run: rustup update stable
 
-      # Install dependencies for grcov
-      - name: Install dependencies
-        run: sudo apt-get install -y llvm-tools gcc
+      # Install LLVM and Clang
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "14.0"
 
       # Run tests and generate coverage data
       - name: Run tests with coverage
