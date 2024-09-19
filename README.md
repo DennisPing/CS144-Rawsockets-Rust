@@ -1,7 +1,7 @@
 # TCP-IP-Raw-Sockets-Rust
 
 ![Build Status](https://github.com/DennisPing/TCP-IP-Raw-Sockets-Rust/actions/workflows/rust.yml/badge.svg)
-![Coverage](https://img.shields.io/badge/coverage-50%25-yellow)
+[![codecov](https://codecov.io/gh/DennisPing/TCP-IP-Raw-Sockets-Rust/graph/badge.svg?token=Z0XXSP5MGP)](https://codecov.io/gh/DennisPing/TCP-IP-Raw-Sockets-Rust)
 
 ## Overview
 
