@@ -26,29 +26,24 @@ jobs:
           toolchain: nightly
           override: true
 
-      # Clean workspace
-      - name: Clean workspace
-        uses: actions-rs/cargo@v1
-        with:
-          command: clean
+      # Clean workspace to ensure fresh coverage datas
+      - name: Clean
+        run: cargo clean
 
       # Build the project
       - name: Build
-        run: cargo build --verbose
+        run: cargo build
 
-      # Run tests with coverage flags
+      # Run tests
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all-features --no-fail-fast
+        run: cargo test
 
       # Use grcov to generate coverage report
       - name: rust-grcov
         uses: actions-rs/grcov@v0.1
 
       # Upload coverage report to Codecov
-      - name: codecov
+      - name: Codecov
         uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
