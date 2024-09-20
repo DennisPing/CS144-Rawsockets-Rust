@@ -1,5 +1,6 @@
 use crate::net::ip_header::IPHeader;
 use crate::net::tcp_flags::TCPFlags;
+use std::io::{Error, ErrorKind};
 use std::vec;
 
 #[derive(Debug, Clone)]
@@ -43,9 +44,9 @@ impl TCPHeader {
     }
 
     /// Convert a byte vector into a `TCPHeader`.
-    pub fn from_bytes(data: &[u8]) -> Result<Self, &'static str> {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
         if data.len() < 20 {
-            return Err("Not enough bytes to parse TCP header");
+            return Err(Error::from(ErrorKind::InvalidData));
         }
 
         let src_port = u16::from_be_bytes([data[0], data[1]]);

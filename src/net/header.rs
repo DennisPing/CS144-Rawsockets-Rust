@@ -1,4 +1,5 @@
 use crate::net::{IPHeader, TCPHeader};
+use std::io::{Error, ErrorKind};
 
 /// Pack an `IPHeader` and `TCPHeader` into a byte vector.
 pub fn pack(iph: &IPHeader, tcph: &TCPHeader) -> Vec<u8> {
@@ -11,21 +12,21 @@ pub fn pack(iph: &IPHeader, tcph: &TCPHeader) -> Vec<u8> {
 }
 
 /// Unpack a byte vector into an `IPHeader` and `TCPHeader`.
-pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), &'static str> {
+pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), Error> {
     if packet.len() < 20 {
-        return Err("Incomplete TCP/IP packet");
+        return Err(Error::from(ErrorKind::InvalidData));
     }
 
     let iph_bytes = &packet[0..20];
     if IPHeader::checksum(&iph_bytes) != 0 {
-        return Err("IP checksum failed");
+        return Err(Error::new(ErrorKind::Other, "Bad IP checksum"));
     }
 
     let iph = IPHeader::from_bytes(iph_bytes)?;
 
     let tcp_bytes = &packet[20..];
     if TCPHeader::checksum(tcp_bytes, &iph) != 0 {
-        return Err("TCP checksum failed");
+        return Err(Error::new(ErrorKind::Other, "Bad TCP checksum"));
     }
 
     let tcph = TCPHeader::from_bytes(&tcp_bytes)?;
@@ -122,5 +123,37 @@ mod tests {
             hex::decode("0101080abeb95f0abb687a45").unwrap()
         );
         assert_eq!(tcph.payload, payload)
+    }
+
+    #[test]
+    fn test_unpack_corrupt_iph() {
+        let mut ip_bytes = hex::decode(get_ip_hex_with_payload()).unwrap();
+        ip_bytes[10] = 0xff; // Corrupt a byte
+        let tcp_bytes = hex::decode(get_tcp_hex_with_payload()).unwrap();
+        let payload = hex::decode(giant_payload()).unwrap();
+
+        let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
+        let result = unpack(&packet);
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Other);
+        assert_eq!(err.into_inner().unwrap().to_string(), "Bad IP checksum")
+    }
+
+    #[test]
+    fn test_unpack_corrupt_tcph() {
+        let ip_bytes = hex::decode(get_ip_hex_with_payload()).unwrap();
+        let mut tcp_bytes = hex::decode(get_tcp_hex_with_payload()).unwrap();
+        tcp_bytes[10] = 0xff; // Corrupt a byte
+        let payload = hex::decode(giant_payload()).unwrap();
+
+        let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
+        let result = unpack(&packet);
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Other);
+        assert_eq!(err.into_inner().unwrap().to_string(), "Bad TCP checksum")
     }
 }

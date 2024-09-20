@@ -1,4 +1,5 @@
 use crate::net::ip_flags::IPFlags;
+use std::io::{Error, ErrorKind};
 use std::net::Ipv4Addr;
 
 #[derive(Debug, Clone)]
@@ -30,7 +31,7 @@ impl IPHeader {
         buf[6..8].copy_from_slice(&flags.to_be_bytes());
         buf[8] = self.ttl;
         buf[9] = self.protocol;
-        buf[10..12].copy_from_slice(&[0, 0]);
+        // Leave 0..12 blank for checksum
         buf[12..16].copy_from_slice(&self.src_ip.octets());
         buf[16..20].copy_from_slice(&self.dst_ip.octets());
         let checksum = Self::checksum(&buf);
@@ -40,9 +41,9 @@ impl IPHeader {
     }
 
     /// Convert a byte array into an `IPHeader`.
-    pub fn from_bytes(data: &[u8]) -> Result<Self, &'static str> {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
         if data.len() < 20 {
-            return Err("Not enough bytes to parse IP header");
+            return Err(Error::from(ErrorKind::InvalidData));
         }
 
         let version = data[0] >> 4;
