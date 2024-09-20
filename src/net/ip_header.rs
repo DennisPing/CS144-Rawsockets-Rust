@@ -1,5 +1,4 @@
 use crate::net::ip_flags::IPFlags;
-use std::io::{Error, ErrorKind};
 use std::net::Ipv4Addr;
 
 #[derive(Debug, Clone)]

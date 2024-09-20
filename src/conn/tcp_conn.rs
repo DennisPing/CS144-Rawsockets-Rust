@@ -99,7 +99,7 @@ impl TcpConn {
                         tcph.flags.contains(TCPFlags::FIN),
                     );
 
-                    let data = self.tcp_receiver.stream_out().peek(payload_len);
+                    let data = self.tcp_receiver.stream_out().peek_output(payload_len);
                     return Ok(data);
                 }
                 Err(Errno::EINTR) => {

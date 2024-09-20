@@ -6,7 +6,8 @@
 ## Overview
 
 An HTTP/1 and HTTP/2 Cleartext (H2C) implementation on top of a custom TCP/IP network stack implementation based on the
-[Stanford CS144](https://cs144.github.io/) `libsponge` library. The transport layer uses raw sockets.
+[Stanford CS144](https://cs144.github.io/) `libsponge` library and
+the [Northeastern CS5700](https://david.choffnes.com/classes/cs4700sp22/project4.php) `rawsockets` project.
 
 Done for self-learning purposes.
 
@@ -23,7 +24,7 @@ Done for self-learning purposes.
 ## Requirements
 
 - Linux
-- Minimum supported Rust version (MSRV): 1.69
+- Rust 1.69+
 
 ## Required System Changes
 
@@ -59,6 +60,8 @@ cargo build --release
 ```bash
 sudo ./target/release/rawhttpget [http://exampleurl.com]
 ```
+
+**Note:** Does not work withs `HTTPS` URL's because encryption is not a goal of this project.
 
 ## Run Unit Tests
 
