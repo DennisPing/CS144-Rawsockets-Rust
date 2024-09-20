@@ -1,6 +1,5 @@
 use crate::net::ip_header::IPHeader;
 use crate::net::tcp_flags::TCPFlags;
-use std::io::{Error, ErrorKind};
 use std::vec;
 
 #[derive(Debug, Clone)]
@@ -44,11 +43,7 @@ impl TCPHeader {
     }
 
     /// Convert a byte vector into a `TCPHeader`.
-    pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
-        if data.len() < 20 {
-            return Err(Error::from(ErrorKind::InvalidData));
-        }
-
+    pub fn from_bytes(data: &[u8]) -> Self {
         let src_port = u16::from_be_bytes([data[0], data[1]]);
         let dst_port = u16::from_be_bytes([data[2], data[3]]);
         let seq_num = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
@@ -64,7 +59,7 @@ impl TCPHeader {
         let options = data[20..header_len].to_vec();
         let payload = data[header_len..].to_vec();
 
-        Ok(Self {
+        Self {
             src_port,
             dst_port,
             seq_num,
@@ -77,7 +72,7 @@ impl TCPHeader {
             urgent,
             options,
             payload,
-        })
+        }
     }
 
     /// Compute the checksum for a `TCPHeader`.
@@ -96,10 +91,11 @@ impl TCPHeader {
 
         // Add protocol and segment length
         sum += iph.protocol as u32;
-        sum += (tcp_bytes.len()) as u32;
+        // sum += (tcp_bytes.len()) as u32;
+        sum += (iph.total_len - (iph.ihl * 4) as u16) as u32;
 
         // Sum the TCP Header and payload
-        for i in (0..tcp_bytes.len()).step_by(2) {
+        for i in (0..tcp_bytes.len() - 1).step_by(2) {
             sum += ((tcp_bytes[i] as u32) << 8) | (tcp_bytes[i + 1] as u32);
         }
 
@@ -143,7 +139,7 @@ mod tests {
 
         // Get the IP header in order to build TCP header
         let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
-        let iph = IPHeader::from_bytes(ip_bytes.as_slice()).unwrap();
+        let iph = IPHeader::from_bytes(ip_bytes.as_slice());
         let data = tcp_header.to_bytes(&iph);
 
         // Verify that checksum is 0
@@ -158,7 +154,7 @@ mod tests {
     #[test]
     fn test_tcp_header_from_bytes() {
         let tcp_bytes = hex::decode(test_utils::get_tcp_hex()).unwrap();
-        let tcph = TCPHeader::from_bytes(&tcp_bytes).unwrap();
+        let tcph = TCPHeader::from_bytes(&tcp_bytes);
 
         assert_eq!(tcph.src_port, 50871);
         assert_eq!(tcph.dst_port, 80);

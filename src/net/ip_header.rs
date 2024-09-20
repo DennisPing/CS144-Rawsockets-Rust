@@ -41,15 +41,11 @@ impl IPHeader {
     }
 
     /// Convert a byte array into an `IPHeader`.
-    pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
-        if data.len() < 20 {
-            return Err(Error::from(ErrorKind::InvalidData));
-        }
-
+    pub fn from_bytes(data: &[u8]) -> Self {
         let version = data[0] >> 4;
         let ihl = data[0] & 0x0f;
         let tos = data[1];
-        let tot_len = u16::from_be_bytes([data[2], data[3]]);
+        let total_len = u16::from_be_bytes([data[2], data[3]]);
         let id = u16::from_be_bytes([data[4], data[5]]);
         let combo_flags = u16::from_be_bytes([data[6], data[7]]);
         let (flags, frag_offset) = IPFlags::unpack(combo_flags);
@@ -59,11 +55,11 @@ impl IPHeader {
         let src_ip = Ipv4Addr::new(data[12], data[13], data[14], data[15]);
         let dst_ip = Ipv4Addr::new(data[16], data[17], data[18], data[19]);
 
-        Ok(Self {
+        Self {
             version,
             ihl,
             tos,
-            total_len: tot_len,
+            total_len,
             id,
             flags,
             frag_offset,
@@ -72,7 +68,7 @@ impl IPHeader {
             checksum,
             src_ip,
             dst_ip,
-        })
+        }
     }
 
     /// Compute the checksum for an `IPHeader` (Ipv4).
@@ -130,7 +126,7 @@ mod tests {
     #[test]
     fn test_ip_header_from_bytes() {
         let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
-        let iph = IPHeader::from_bytes(&ip_bytes).unwrap();
+        let iph = IPHeader::from_bytes(&ip_bytes);
 
         assert_eq!(iph.version, 4);
         assert_eq!(iph.ihl, 5);
