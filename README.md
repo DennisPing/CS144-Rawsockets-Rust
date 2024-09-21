@@ -34,7 +34,7 @@ Done for self-learning purposes.
     sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP
     ```
 
-2. Find your "network interface" name using: `ifconfig -a` and disable gro, tx, rx
+2. Find your "network interface" name using: `ifconfig -a` and disable `gro, tx, rx`
 
     ```bash
     sudo ethtool -K <network interface> gro off
@@ -61,7 +61,7 @@ cargo build --release
 sudo ./target/release/rawhttpget [http://exampleurl.com]
 ```
 
-**Note:** Does not work withs `HTTPS` URL's because encryption is not a goal of this project.
+**Note:** Does not work with `HTTPS` URL's because encryption is not a goal of this project.
 
 ## Run Unit Tests
 

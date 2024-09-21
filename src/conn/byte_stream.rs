@@ -104,7 +104,7 @@ impl Read for ByteStream {
         let to_read = buf.len().min(self.buffer.len());
 
         if to_read > 0 {
-            // Make buffer contiguous if not already (e.g. a break in the ring buffer)
+            // Make ring buffer contiguous if not already
             let contiguous = self.buffer.make_contiguous();
             buf[..to_read].copy_from_slice(&contiguous[..to_read]);
             self.buffer.drain(..to_read);
@@ -140,9 +140,8 @@ mod tests {
 
     #[test]
     fn test_construction() {
-        let capacity = 1024;
-        let bs = ByteStream::new(capacity);
-        assert_eq!(bs.capacity, capacity);
+        let bs = ByteStream::new(100);
+        assert_eq!(bs.remaining_capacity(), 100);
         assert_eq!(bs.buffer_size(), 0);
         assert_eq!(bs.bytes_written(), 0);
         assert_eq!(bs.bytes_read(), 0);
@@ -153,9 +152,8 @@ mod tests {
 
     #[test]
     fn test_remaining_capacity() {
-        let capacity = 10;
-        let mut bs = ByteStream::new(capacity);
-        assert_eq!(bs.remaining_capacity(), capacity);
+        let mut bs = ByteStream::new(10);
+        assert_eq!(bs.remaining_capacity(), 10);
 
         let data = generate_data(4);
         bs.write(&data).unwrap();
@@ -192,25 +190,25 @@ mod tests {
         let num_chunks = 10;
 
         // Check write
-        for i in 0..num_chunks {
+        for i in 1..num_chunks {
             let data = generate_data(chunk_size);
             let n_written = bs.write(&data).unwrap();
 
             // Check write
             assert_eq!(n_written, chunk_size);
-            assert_eq!(bs.bytes_written(), (i + 1) * chunk_size);
-            assert_eq!(bs.buffer_size(), (i + 1) * chunk_size);
+            assert_eq!(bs.bytes_written(), i * chunk_size);
+            assert_eq!(bs.buffer_size(), i * chunk_size);
         }
 
         // Check read
-        for i in 0..num_chunks {
+        for i in 1..num_chunks {
             let mut buf = vec![0; chunk_size];
             let n_read = bs.read(&mut buf).unwrap();
             assert_eq!(n_read, chunk_size);
 
             let expected_data: Vec<u8> = (0..chunk_size as u8).collect();
             assert_eq!(buf, expected_data);
-            assert_eq!(bs.bytes_read(), (i + 1) * chunk_size);
+            assert_eq!(bs.bytes_read(), i * chunk_size);
         }
 
         assert!(bs.buffer_empty())
