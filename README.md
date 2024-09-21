@@ -6,7 +6,7 @@
 ## Overview
 
 An HTTP/1 and HTTP/2 Cleartext (H2C) implementation on top of a custom TCP/IP network stack implementation based on the
-[Stanford CS144](https://cs144.github.io/) `libsponge` library and
+[Stanford CS144](https://cs144.github.io/) `libsponge` library (now called `minnow`) and
 the [Northeastern CS5700](https://david.choffnes.com/classes/cs4700sp22/project4.php) `rawsockets` project.
 
 Done for self-learning purposes.

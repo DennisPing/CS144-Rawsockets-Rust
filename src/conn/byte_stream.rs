@@ -122,7 +122,7 @@ impl Write for ByteStream {
         self.write_bytes(buf)
     }
 
-    /// Flush the `ByteStream`
+    /// Flush the `ByteStream` (no-op)
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
@@ -317,5 +317,7 @@ mod tests {
         let mut read_buf = vec![0; 7];
         bs.read(&mut read_buf).unwrap();
         assert_eq!(read_buf, b"cdefghi");
+
+        assert!(bs.flush().is_ok()); // No-op flush
     }
 }

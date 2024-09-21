@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::io::Write;
 
 #[derive(Debug)]
-pub struct StreamReassembler {
+pub struct Reassembler {
     buffer: BTreeMap<usize, Vec<u8>>, // Stores out-of-order segments indexed by their starting byte
     next_idx: usize,
     output: ByteStream,
@@ -11,9 +11,9 @@ pub struct StreamReassembler {
     unassembled_bytes_count: usize,
 }
 
-impl StreamReassembler {
+impl Reassembler {
     pub fn new(output: ByteStream) -> Self {
-        StreamReassembler {
+        Reassembler {
             buffer: BTreeMap::new(),
             next_idx: 0,
             output,
