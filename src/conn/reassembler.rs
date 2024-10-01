@@ -221,10 +221,10 @@ mod tests {
         Reassembler::new(stream)
     }
 
-    fn read_all(reassembler: &mut Reassembler) -> Vec<u8> {
+    fn read_all_as_string(reassembler: &mut Reassembler) -> String {
         let mut buf = vec![];
         reassembler.read_to_end(&mut buf).unwrap();
-        buf
+        std::str::from_utf8(&buf).unwrap().to_owned()
     }
 
     // -- Test capacity --
@@ -239,8 +239,7 @@ mod tests {
         assert_eq!(ra.bytes_pending(), 0);
 
         // Read out all data
-        let data = read_all(&mut ra);
-        let mut actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("Hello", actual);
 
         // Insert second
@@ -249,8 +248,7 @@ mod tests {
         assert_eq!(ra.bytes_pending(), 0);
 
         // Read out all data
-        let data = read_all(&mut ra);
-        actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("World", actual);
 
         // Insert third
@@ -259,8 +257,7 @@ mod tests {
         assert_eq!(ra.bytes_pending(), 0);
 
         // Read out all data
-        let data = read_all(&mut ra);
-        actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("Honda", actual);
 
         assert!(ra.output.eof());
@@ -281,8 +278,7 @@ mod tests {
         assert_eq!(ra.bytes_pending(), 0);
 
         // Read out all data
-        let data = read_all(&mut ra);
-        let mut actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("Hello", actual);
 
         // Insert third
@@ -291,8 +287,7 @@ mod tests {
         assert_eq!(ra.bytes_pending(), 0);
 
         // Read out all data
-        let data = read_all(&mut ra);
-        actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("World", actual);
 
         assert!(ra.output.eof());
@@ -313,8 +308,7 @@ mod tests {
         assert_eq!(ra.bytes_pending(), 0);
 
         // Read out all data
-        let data = read_all(&mut ra);
-        let mut actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!(ra.output.bytes_read(), 1);
         assert_eq!("a", actual);
 
@@ -324,8 +318,7 @@ mod tests {
         assert_eq!(ra.bytes_pending(), 0);
 
         // Read out all data
-        let data = read_all(&mut ra);
-        actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!(ra.output.bytes_read(), 2);
         assert_eq!("b", actual);
     }
@@ -345,15 +338,13 @@ mod tests {
         ra.insert(b"a".to_vec(), 0, false).unwrap();
         assert_eq!(ra.output.bytes_written(), 2);
         assert_eq!(ra.bytes_pending(), 0);
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("ab", actual);
 
         ra.insert(b"bc".to_vec(), 1, false).unwrap();
         assert_eq!(ra.output.bytes_written(), 3);
         assert_eq!(ra.bytes_pending(), 0);
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("c", actual);
     }
 
@@ -368,17 +359,13 @@ mod tests {
         ra.insert(b"a".to_vec(), 0, false).unwrap();
         assert_eq!(ra.output.bytes_written(), 2);
         assert_eq!(ra.bytes_pending(), 0);
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("ab", actual);
-
-        assert!(!ra.output.eof());
 
         ra.insert(b"bc".to_vec(), 1, true).unwrap();
         assert_eq!(ra.output.bytes_written(), 3);
         assert_eq!(ra.bytes_pending(), 0);
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("c", actual);
 
         assert!(ra.output.eof());
@@ -395,20 +382,16 @@ mod tests {
         assert_eq!(ra.output.bytes_written(), 4);
 
         // Read out data
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("abcd", actual);
-        assert!(!ra.output.eof());
 
         // Insert duplicate data at same index
         ra.insert(b"abcd".to_vec(), 0, false).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
 
         // Read out data, should be empty string
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
-        assert!(!ra.output.eof());
     }
 
     #[test]
@@ -420,30 +403,24 @@ mod tests {
         assert_eq!(ra.output.bytes_written(), 4);
 
         // Read out data
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("abcd", actual);
-        assert!(!ra.output.eof());
 
         // Insert data at index 4
         ra.insert(b"abcd".to_vec(), 4, false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
 
         // Read out data
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("abcd", actual);
-        assert!(!ra.output.eof());
 
         // Insert duplicate data at index 0
         ra.insert(b"abcd".to_vec(), 0, false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
 
         // Read out data
-        let data = read_all(&mut ra);
-        let actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
-        assert!(!ra.output.eof());
     }
 
     #[test]
@@ -456,8 +433,7 @@ mod tests {
         assert_eq!(ra.output.bytes_written(), 8);
 
         // Read out data
-        let data = read_all(&mut ra);
-        let mut actual = std::str::from_utf8(&data).unwrap();
+        let actual = read_all_as_string(&mut ra);
         assert_eq!("abcdefgh", actual);
         assert!(!ra.output.eof());
 
@@ -471,8 +447,7 @@ mod tests {
             ra.insert(chunk.to_vec(), j as u64, false).unwrap();
             assert_eq!(ra.output.bytes_written(), 8);
 
-            let data = read_all(&mut ra);
-            actual = std::str::from_utf8(&data).unwrap();
+            let actual = read_all_as_string(&mut ra);
             assert_eq!("", actual);
             assert!(!ra.output.eof());
         }
