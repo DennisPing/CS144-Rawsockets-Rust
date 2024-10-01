@@ -2,7 +2,7 @@ use rand::Rng;
 use rawhttpget::conn::ByteStream;
 use std::collections::VecDeque;
 use std::io;
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Write};
 use std::time::Instant;
 
 fn speed_test(
@@ -42,7 +42,7 @@ fn speed_test(
             if let Some(front) = chunks.front() {
                 if front.len() <= stream.remaining_capacity() {
                     let chunk = chunks.pop_front().unwrap();
-                    stream.write_bytes(&chunk)?;
+                    stream.write(&chunk)?;
                 }
             }
         }

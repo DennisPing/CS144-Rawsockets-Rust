@@ -4,7 +4,7 @@ pub mod tcp_conn;
 pub mod tcp_receiver;
 pub mod tcp_state;
 
-// -- Re-export structs for more concise usage
+// -- Re-export public structs --
 
 pub use byte_stream::ByteStream;
 pub use reassembler::Reassembler;

@@ -23,26 +23,6 @@ impl ByteStream {
         }
     }
 
-    /// Read and remove `N` bytes from the byte stream
-    pub fn read_bytes(&mut self, len: usize) -> Vec<u8> {
-        // Heap allocation: use internally for convenience sake. Just use read() in real life.
-        let data = self.peek_output(len);
-        self.pop_output(len);
-        data
-    }
-
-    /// Push `N` bytes into the byte stream
-    pub fn write_bytes(&mut self, data: &[u8]) -> io::Result<usize> {
-        if self.closed {
-            return Err(Error::new(ErrorKind::Other, "stream closed"));
-        }
-        let available = self.remaining_capacity();
-        let to_write = data.len().min(available);
-        self.buffer.extend(&data[..to_write]);
-        self.bytes_written += to_write;
-        Ok(to_write)
-    }
-
     /// Remove `N` bytes from the byte stream and return the actual number of bytes popped
     pub fn pop_output(&mut self, len: usize) -> usize {
         let to_pop = len.min(self.buffer.len());
@@ -119,7 +99,14 @@ impl Read for ByteStream {
 impl Write for ByteStream {
     /// Write data from the buffer into the `ByteStream`
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.write_bytes(buf)
+        if self.closed {
+            return Err(Error::new(ErrorKind::Other, "stream closed"));
+        }
+        let available = self.remaining_capacity();
+        let to_write = buf.len().min(available);
+        self.buffer.extend(&buf[..to_write]);
+        self.bytes_written += to_write;
+        Ok(to_write)
     }
 
     /// Flush the `ByteStream` (no-op)
@@ -129,6 +116,7 @@ impl Write for ByteStream {
 }
 
 // -- Unit tests --
+
 #[cfg(test)]
 mod tests {
     use crate::conn::byte_stream::ByteStream;

@@ -70,50 +70,50 @@ impl TcpConn {
         Ok(())
     }
 
-    pub fn recv_data(&mut self) -> Result<Vec<u8>, Error> {
-        let mut buf = vec![0u8; 1500];
-        let recv_fd = self.recv_fd.as_raw_fd();
-
-        loop {
-            match read(recv_fd, &mut buf) {
-                Ok(n) => {
-                    buf.truncate(n);
-
-                    let (iph, tcph) = match header::unpack(&buf) {
-                        Ok(result) => result,
-                        Err(err) => {
-                            return Err(Error::new(ErrorKind::InvalidData, err.to_string()))
-                        }
-                    };
-
-                    if !iph.src_ip.eq(self.remote_addr.ip()) {
-                        return Err(Error::new(ErrorKind::Other, "mismatch ip address"));
-                    }
-
-                    let payload_len = tcph.payload.len();
-
-                    self.tcp_receiver.receive_segment(
-                        Wrapping(tcph.seq_num),
-                        tcph.payload,
-                        tcph.flags.contains(TCPFlags::SYN),
-                        tcph.flags.contains(TCPFlags::FIN),
-                    );
-
-                    let data = self.tcp_receiver.stream_out().peek_output(payload_len);
-                    return Ok(data);
-                }
-                Err(Errno::EINTR) => {
-                    continue; // Retry reading
-                }
-                Err(Errno::EAGAIN) | Err(Errno::EWOULDBLOCK) => {
-                    return Err(Error::new(ErrorKind::TimedOut, "timeout")); // Timeout or would-block
-                }
-                Err(e) => {
-                    return Err(Error::new(ErrorKind::Other, e.to_string()));
-                }
-            }
-        }
-    }
+    // pub fn recv_data(&mut self) -> Result<Vec<u8>, Error> {
+    //     let mut buf = vec![0u8; 1500];
+    //     let recv_fd = self.recv_fd.as_raw_fd();
+    //
+    //     loop {
+    //         match read(recv_fd, &mut buf) {
+    //             Ok(n) => {
+    //                 buf.truncate(n);
+    //
+    //                 let (iph, tcph) = match header::unpack(&buf) {
+    //                     Ok(result) => result,
+    //                     Err(err) => {
+    //                         return Err(Error::new(ErrorKind::InvalidData, err.to_string()))
+    //                     }
+    //                 };
+    //
+    //                 if !iph.src_ip.eq(self.remote_addr.ip()) {
+    //                     return Err(Error::new(ErrorKind::Other, "mismatch ip address"));
+    //                 }
+    //
+    //                 let payload_len = tcph.payload.len();
+    //
+    //                 self.tcp_receiver.receive_segment(
+    //                     Wrapping(tcph.seq_num),
+    //                     tcph.payload,
+    //                     tcph.flags.contains(TCPFlags::SYN),
+    //                     tcph.flags.contains(TCPFlags::FIN),
+    //                 );
+    //
+    //                 let data = self.tcp_receiver.stream_out().peek_output(payload_len);
+    //                 return Ok(data);
+    //             }
+    //             Err(Errno::EINTR) => {
+    //                 continue; // Retry reading
+    //             }
+    //             Err(Errno::EAGAIN) | Err(Errno::EWOULDBLOCK) => {
+    //                 return Err(Error::new(ErrorKind::TimedOut, "timeout")); // Timeout or would-block
+    //             }
+    //             Err(e) => {
+    //                 return Err(Error::new(ErrorKind::Other, e.to_string()));
+    //             }
+    //         }
+    //     }
+    // }
 
     fn build_packet(
         &self,

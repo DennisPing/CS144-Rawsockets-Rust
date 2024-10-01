@@ -5,7 +5,7 @@ pub mod rawsocket;
 pub mod tcp_flags;
 pub mod tcp_header;
 
-// -- Re-export structs for more concise usage
+// -- Re-export public structs --
 
 pub use ip_flags::IPFlags;
 pub use ip_header::IPHeader;

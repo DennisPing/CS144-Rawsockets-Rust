@@ -5,7 +5,7 @@
 
 ## Overview
 
-An HTTP/1 and HTTP/2 Cleartext (H2C) implementation on top of a custom TCP/IP network stack implementation based on the
+An HTTP/1 and HTTP/2 Cleartext (H2C) implementation on top of a custom TCP/IP network stack based on the
 [Stanford CS144](https://cs144.github.io/) `libsponge` library (now called `minnow`) and
 the [Northeastern CS5700](https://david.choffnes.com/classes/cs4700sp22/project4.php) `rawsockets` project.
 
@@ -25,6 +25,7 @@ Done for self-learning purposes.
 
 - Linux
 - Rust 1.69+
+- No TUN/TAP virtual interface required
 
 ## Required System Changes
 
@@ -67,6 +68,13 @@ sudo ./target/release/rawhttpget [http://exampleurl.com]
 
 ```bash
 cargo test
+```
+
+## Run Benchmarks
+
+```bash
+cd target/release/
+./byte_stream_speed_test
 ```
 
 ## Generate Documentation
