@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::RngCore;
 use rawhttpget::conn::ByteStream;
 use std::collections::VecDeque;
 use std::io;
@@ -13,7 +13,8 @@ fn speed_test(
 ) -> io::Result<()> {
     // Generate random data
     let mut rng = rand::thread_rng();
-    let data: Vec<u8> = (0..input_len).map(|_| rng.random()).collect();
+    let mut data = vec![0u8; input_len];
+    rng.fill_bytes(&mut data);
 
     // Split data into chunks
     let mut chunks = VecDeque::new();
@@ -38,12 +39,10 @@ fn speed_test(
             if !stream.closed() {
                 stream.close();
             }
-        } else {
-            if let Some(front) = chunks.front() {
-                if front.len() <= stream.remaining_capacity() {
-                    let chunk = chunks.pop_front().unwrap();
-                    stream.write(&chunk)?;
-                }
+        } else if let Some(front) = chunks.front() {
+            if front.len() <= stream.remaining_capacity() {
+                let chunk = chunks.pop_front().unwrap();
+                stream.write_all(&chunk)?;
             }
         }
 
@@ -98,5 +97,5 @@ fn main() {
     };
 
     // Speed test result:
-    // ByteStream with capacity=32768, write_size=1500, read_size=128 reached 8.99 Gbit/s
+    // ByteStream with capacity=32768, write_size=1500, read_size=128 reached 8.44 Gbit/s
 }

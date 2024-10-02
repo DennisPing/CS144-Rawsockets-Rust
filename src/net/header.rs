@@ -18,7 +18,7 @@ pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), Error> {
     }
 
     let iph_bytes = &packet[0..20];
-    if IPHeader::checksum(&iph_bytes) != 0 {
+    if IPHeader::checksum(iph_bytes) != 0 {
         return Err(Error::new(ErrorKind::Other, "Bad IP checksum"));
     }
 
@@ -29,7 +29,7 @@ pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), Error> {
         return Err(Error::new(ErrorKind::Other, "Bad TCP checksum"));
     }
 
-    let tcph = TCPHeader::from_bytes(&tcp_bytes);
+    let tcph = TCPHeader::from_bytes(tcp_bytes);
     Ok((iph, tcph))
 }
 
