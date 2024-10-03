@@ -28,7 +28,7 @@ impl Reassembler {
     pub fn insert(
         &mut self,
         data: Vec<u8>,
-        first_index: usize,
+        seq_num: usize,
         is_last_segment: bool,
     ) -> io::Result<()> {
         if data.is_empty() && !is_last_segment {
@@ -38,11 +38,11 @@ impl Reassembler {
         // If this is the last segment, set `last_recvd` flag
         if is_last_segment {
             self.last_recvd = true;
-            self.last_byte_idx = Some(first_index + data.len());
+            self.last_byte_idx = Some(seq_num + data.len());
         }
 
         // Buffer in the new segment
-        self.insert_buffer(first_index, data)?;
+        self.insert_buffer(seq_num, data)?;
 
         // Write as much as possible to the output stream
         self.try_write()?;
@@ -66,47 +66,34 @@ impl Reassembler {
     }
 
     /// Insert data into the buffer, merging overlapping segments
-    fn insert_buffer(&mut self, first_index: usize, data: Vec<u8>) -> io::Result<()> {
+    fn insert_buffer(&mut self, seq_num: usize, data: Vec<u8>) -> io::Result<()> {
         if data.is_empty() {
             return Ok(());
         }
 
-        // If new segment is entirely before the next expected byte, just ignore
-        if first_index + data.len() <= self.next_byte_idx {
+        let last_idx = seq_num + data.len();
+
+        // Ignore the segment if it's entirely before the next expected byte
+        if last_idx <= self.next_byte_idx {
             return Ok(());
         }
 
-        // Calculate the effective start and end idx within buffer capacity
-        let start = first_index.max(self.next_byte_idx);
-        let end =
-            (first_index + data.len()).min(self.next_byte_idx + self.output.remaining_capacity());
+        // Calculate the effective range within buffer capacity
+        let start = seq_num.max(self.next_byte_idx);
+        let end = last_idx.min(self.next_byte_idx + self.output.remaining_capacity());
 
         if start >= end {
-            return Ok(()); // No capacity left to buffer any part of the new data
+            return Ok(()); // No capacity to buffer
         }
 
-        // Calculate the offset within the data vec
-        let data_offset = start - first_index;
-        let window_data = &data[data_offset..(end - first_index)];
+        // Calculate the effective slice of data that fits within [start, end)
+        let offset = start - seq_num;
+        let window = &data[offset..(end - seq_num)];
+        let mut merged = window.to_vec();
+        let mut m_start = start;
+        let mut m_end = end;
 
-        // Create merged segment boundaries
-        let mut merged_start = start;
-        let mut merged_end = end;
-        let mut merged_data = window_data.to_vec();
-
-        // Find overlapping segments
-        let overlapping_segments: Vec<(usize, Vec<u8>)> = self
-            .segments
-            .range(..merged_end)
-            .filter_map(|(&seg_start, seg_data)| {
-                let seg_end = seg_start + seg_data.len();
-                if seg_end > merged_start {
-                    Some((seg_start, seg_data.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let overlapping_segments = self.find_overlapping_segments(m_start, m_end);
 
         // Merge all overlapping segments with the new segment
         for (seg_start, seg_data) in overlapping_segments {
@@ -114,57 +101,95 @@ impl Reassembler {
 
             let seg_end = seg_start + seg_data.len();
 
-            // Update the merged segment boundaries
-            merged_start = merged_start.min(seg_start);
-            merged_end = merged_end.max(seg_end);
+            if seg_end <= m_end {
+                // Fully overlapping within [m_start, m_end)
+                m_start = m_start.min(seg_start);
+                m_end = m_end.max(seg_end);
 
-            // Calculate the relative position of the existing segment within the merged segment
-            let insert_idx = seg_start.saturating_sub(merged_start); // My brain hurts
+                let insert_idx = seg_start - m_start;
+                let req_len = m_end - m_start;
 
-            // Resize merged_data if necessary
-            let required_len = merged_end - merged_start;
-            if merged_data.len() < required_len {
-                merged_data.resize(required_len, 0);
+                // Resize merged data if necessary
+                if merged.len() < req_len {
+                    merged.resize(req_len, 0);
+                }
+
+                // Overlay the existing segment data onto merged data
+                merged[insert_idx..(insert_idx + seg_data.len())].copy_from_slice(&seg_data);
+            } else {
+                // Partial overlap: seg_end > m_end
+                m_start = m_start.min(seg_start);
+
+                let overlap_len = m_end - seg_start;
+                let insert_idx = seg_start - m_start;
+                let req_len = m_end - m_start;
+
+                // Resize merged data if necessary
+                if merged.len() < req_len {
+                    merged.resize(req_len, 0);
+                }
+
+                // Overlay only the overlapping part onto merged_data
+                merged[insert_idx..(insert_idx + overlap_len)]
+                    .copy_from_slice(&seg_data[..overlap_len]);
+
+                // Preserve the non-overlapping part
+                let rem_start = m_end;
+                let rem_data = seg_data[overlap_len..].to_vec();
+                self.segments.insert(rem_start, rem_data);
             }
-
-            // Overlay the existing segment data onto the merged data
-            merged_data[insert_idx..(insert_idx + seg_data.len())].copy_from_slice(&seg_data);
         }
 
+        // Overlay the new incoming data into merged data
+        let new_idx = start - m_start;
+        merged[new_idx..(new_idx + window.len())].copy_from_slice(window);
+
         // Insert merged segment back into the buffer
-        self.segments.insert(merged_start, merged_data);
+        self.segments.insert(m_start, merged);
 
         Ok(())
     }
 
+    fn find_overlapping_segments(&self, start: usize, end: usize) -> Vec<(usize, Vec<u8>)> {
+        // Thanks Open-AI :)
+        self.segments
+            .range(..end)
+            .filter_map(|(&seg_start, seg_data)| {
+                let seg_end = seg_start + seg_data.len();
+                if seg_end > start {
+                    Some((seg_start, seg_data.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Attempt to write contiguous data from the buffer to the output `ByteStream`
     fn try_write(&mut self) -> io::Result<()> {
-        // Attempt to retrieve the segment starting at `next_byte`
         while let Some(mut data) = self.segments.remove(&self.next_byte_idx) {
-            // Attempt to write the entire segment to the output
-            let bytes_written = self.output.write(&data)?;
+            let n = self.output.write(&data)?;
 
-            if bytes_written == 0 {
+            if n == 0 {
                 // If unable to write to ByteStream, then re-insert the segment and break
                 self.segments.insert(self.next_byte_idx, data);
                 break;
             }
 
-            if bytes_written < data.len() {
+            if n < data.len() {
                 // Partial write occurred; store the remaining data
-                let remaining_data = data.split_off(bytes_written);
-                self.segments
-                    .insert(self.next_byte_idx + bytes_written, remaining_data);
+                let rem_data = data.split_off(n);
+                self.segments.insert(self.next_byte_idx + n, rem_data);
 
-                // Update `next_byte_idx` to he new position
-                self.next_byte_idx += bytes_written;
+                // Update `next_byte_idx` to the new position
+                self.next_byte_idx += n;
                 break;
             } else {
                 // Full write occurred
-                self.next_byte_idx += bytes_written;
+                self.next_byte_idx += n;
             }
 
-            // Check if all bytes have been written and close the stream if necessary
+            // If last flag is true, and all bytes have been written, then close the stream
             if self.last_recvd {
                 if let Some(last_idx) = self.last_byte_idx {
                     if self.next_byte_idx >= last_idx {
@@ -589,7 +614,7 @@ mod tests {
     // -- Test overlapping segments --
 
     #[test]
-    fn test_overlapping_extend() {
+    fn test_overlap_extend() {
         let mut ra = create_reassembler(32);
 
         ra.insert(b"Hello".to_vec(), 0, false).unwrap();
@@ -601,7 +626,7 @@ mod tests {
     }
 
     #[test]
-    fn test_overlapping_extend_after_read() {
+    fn test_overlap_extend_after_read() {
         let mut ra = create_reassembler(32);
 
         ra.insert(b"Hello".to_vec(), 0, false).unwrap();
@@ -615,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn test_overlapping_fill_gap() {
+    fn test_overlap_fill_gap() {
         let mut ra = create_reassembler(32);
 
         ra.insert(b"World".to_vec(), 5, false).unwrap();
@@ -629,7 +654,7 @@ mod tests {
     }
 
     #[test]
-    fn test_overlapping_partial() {
+    fn test_overlap_partial() {
         let mut ra = create_reassembler(32);
 
         ra.insert(b"World".to_vec(), 5, false).unwrap();
@@ -662,6 +687,9 @@ mod tests {
         assert_eq!("", actual);
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 5);
+        
+        // _bc_ef
+        // __cde_ (overlap in the middle between two pending)
 
         ra.insert(b"a".to_vec(), 0, false).unwrap();
         let actual = read_all_as_string(&mut ra);
@@ -671,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn test_overlapping_hard_1() {
+    fn test_overlap_many_pending() {
         let mut ra = create_reassembler(32);
 
         ra.insert(b"efgh".to_vec(), 4, false).unwrap();
@@ -707,22 +735,15 @@ mod tests {
         assert_eq!(ra.bytes_pending(), 0);
     }
 
-    #[ignore]
     #[test]
     fn test_random_shuffle() {
-        // let n_reps = 32;
-        // let n_segs = 128;
-        // let max_seg_len = 2048;
-        // let max_offset_shift = 1023; // Maximum shift to introduce overlaps
-
-        let n_reps = 1;
-        let n_segs = 10;
-        let max_seg_len = 100;
-        let max_offset_shift = 25; // Maximum shift to introduce overlaps
+        let n_reps = 32;
+        let n_segs = 128;
+        let max_seg_len = 2048;
+        let max_offset_shift = 1023; // Maximum shift to introduce overlaps
 
         let mut rng = rand::thread_rng();
-        for i in 0..n_reps {
-            let rep_name = format!("shuffle rep {i}");
+        for _ in 0..n_reps {
             let capacity = n_segs * max_seg_len;
             let mut ra = create_reassembler(capacity);
 
@@ -744,13 +765,12 @@ mod tests {
             segments.shuffle(&mut rng);
 
             // Generate random data
-            // let mut original_payload = vec![0u8; total_len];
-            // rng.fill_bytes(&mut original_payload);
-            let original_payload: Vec<u8> = (0..=total_len).map(|x| x as u8).collect();
+            let mut payload = vec![0u8; total_len];
+            rng.fill_bytes(&mut payload);
 
             // Insert each shuffled segment into the Reassembler
             for (start, size) in segments {
-                let slice = &original_payload[start..(start + size)];
+                let slice = &payload[start..(start + size)];
                 let is_last = start + size == total_len;
                 ra.insert(slice.to_vec(), start, is_last)
                     .expect("Insert into Reassembler failed");
@@ -759,7 +779,8 @@ mod tests {
             // Read out all data
             let mut buf = vec![];
             ra.read_to_end(&mut buf).expect("Read to end failed");
-            assert_eq!(original_payload, buf, "Failed {rep_name}");
+            assert_eq!(payload.len(), buf.len());
+            assert_eq!(payload, buf);
         }
     }
 }
