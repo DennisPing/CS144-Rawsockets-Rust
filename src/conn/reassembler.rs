@@ -25,20 +25,20 @@ impl Reassembler {
     }
 
     /// Insert a new byte segment into the `Reassembler`
-    pub fn insert(
-        &mut self,
-        data: Vec<u8>,
-        seq_num: usize,
-        is_last_segment: bool,
-    ) -> io::Result<()> {
-        if data.is_empty() && !is_last_segment {
+    pub fn insert(&mut self, data: Vec<u8>, seq_num: usize, is_last: bool) -> io::Result<()> {
+        if data.is_empty() && !is_last {
             return Ok(());
         }
 
-        // If this is the last segment, set `last_recvd` flag
-        if is_last_segment {
+        // If this is the last segment, set `last_recvd` flag and record `last_byte_idx`
+        if is_last {
             self.last_recvd = true;
             self.last_byte_idx = Some(seq_num + data.len());
+        }
+
+        if self.is_done() {
+            self.output.close();
+            return Ok(());
         }
 
         // Buffer in the new segment
@@ -65,7 +65,7 @@ impl Reassembler {
         self.next_byte_idx
     }
 
-    /// Insert data into the buffer, merging overlapping segments
+    /// Insert data into the buffer; merging overlapping segments
     fn insert_buffer(&mut self, seq_num: usize, data: Vec<u8>) -> io::Result<()> {
         if data.is_empty() {
             return Ok(());
@@ -144,14 +144,14 @@ impl Reassembler {
         let new_idx = start - m_start;
         merged[new_idx..(new_idx + window.len())].copy_from_slice(window);
 
-        // Insert merged segment back into the buffer
+        // Insert merged segment back into the BTreeMap
         self.segments.insert(m_start, merged);
 
         Ok(())
     }
 
     fn find_overlapping_segments(&self, start: usize, end: usize) -> Vec<(usize, Vec<u8>)> {
-        // Thanks Open-AI :)
+        // Thanks OpenAI :)
         self.segments
             .range(..end)
             .filter_map(|(&seg_start, seg_data)| {
@@ -189,23 +189,29 @@ impl Reassembler {
                 self.next_byte_idx += n;
             }
 
-            // If last flag is true, and all bytes have been written, then close the stream
-            if self.last_recvd {
-                if let Some(last_idx) = self.last_byte_idx {
-                    if self.next_byte_idx >= last_idx {
-                        self.output.close();
-                        break;
-                    }
-                }
+            if self.is_done() {
+                self.output.close();
+                break;
             }
         }
 
         Ok(())
     }
+
+    /// Check if all the data has been received and written out
+    fn is_done(&self) -> bool {
+        if self.last_recvd {
+            if let Some(last_idx) = self.last_byte_idx {
+                if self.next_byte_idx >= last_idx {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 impl Read for Reassembler {
-    /// Read data from the assembled `ByteStream` into the buffer
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.output.read(buf)
     }
@@ -268,7 +274,7 @@ mod tests {
         assert_eq!("Honda", actual);
 
         let output = ra.get_output();
-        assert!(output.closed());
+        assert!(output.is_closed());
         assert!(output.eof());
     }
 
@@ -378,6 +384,25 @@ mod tests {
         assert_eq!("c", actual);
 
         assert!(ra.output.eof());
+    }
+
+    #[test]
+    fn test_insert_junk_after_close() {
+        let mut ra = create_reassembler(32);
+
+        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
+        ra.insert(b"efgh".to_vec(), 4, true).unwrap();
+        let actual = read_all_as_string(&mut ra);
+        assert_eq!("abcdefgh", actual);
+        assert!(ra.output.eof());
+
+        // Verify code doesn't blow up
+        let result = ra.insert(b"zzz".to_vec(), 8, false);
+        assert!(result.is_ok());
+
+        // Verify nothing gets read
+        let actual = read_all_as_string(&mut ra);
+        assert_eq!("", actual);
     }
 
     // -- Test sequential --
@@ -505,7 +530,7 @@ mod tests {
 
         // Perform 1000 random insertions
         let mut rng = rand::thread_rng();
-        for i in 0..1000 {
+        for _ in 0..1000 {
             let j = rng.gen_range(0..8);
             let k = rng.gen_range(j..8);
 
@@ -687,7 +712,7 @@ mod tests {
         assert_eq!("", actual);
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 5);
-        
+
         // _bc_ef
         // __cde_ (overlap in the middle between two pending)
 

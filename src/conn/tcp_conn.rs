@@ -54,7 +54,7 @@ impl TcpConn {
     }
 
     fn connect(&mut self) -> Result<(), &'static str> {
-        let seq_num: u32 = self.rng.random();
+        let seq_num: u32 = self.rng.gen();
         let ack_num: u32 = 0;
 
         Ok(())

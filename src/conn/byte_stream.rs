@@ -48,7 +48,7 @@ impl ByteStream {
     }
 
     /// Is the byte stream closed?
-    pub fn closed(&self) -> bool {
+    pub fn is_closed(&self) -> bool {
         self.closed
     }
 
@@ -58,13 +58,13 @@ impl ByteStream {
     }
 
     /// Is the byte stream empty?
-    pub fn buffer_empty(&self) -> bool {
+    pub fn is_buffer_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     /// Is the end of the byte stream reached?
     pub fn eof(&self) -> bool {
-        self.closed && self.buffer_empty()
+        self.closed && self.is_buffer_empty()
     }
 
     /// The total number of bytes written
@@ -79,7 +79,6 @@ impl ByteStream {
 }
 
 impl Read for ByteStream {
-    /// Read data from the `ByteStream` into the buffer
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let to_read = buf.len().min(self.buffer.len());
 
@@ -97,7 +96,6 @@ impl Read for ByteStream {
 }
 
 impl Write for ByteStream {
-    /// Write data from the buffer into the `ByteStream`
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.closed {
             return Err(Error::new(ErrorKind::Other, "stream closed"));
@@ -108,10 +106,9 @@ impl Write for ByteStream {
         self.bytes_written += to_write;
         Ok(to_write)
     }
-
-    /// Flush the `ByteStream` (no-op)
+    
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        Ok(()) // no-op because this is an in-memory data structure
     }
 }
 
@@ -133,8 +130,8 @@ mod tests {
         assert_eq!(bs.buffer_size(), 0);
         assert_eq!(bs.bytes_written(), 0);
         assert_eq!(bs.bytes_read(), 0);
-        assert!(!bs.closed());
-        assert!(bs.buffer_empty());
+        assert!(!bs.is_closed());
+        assert!(bs.is_buffer_empty());
         assert!(!bs.eof());
     }
 
@@ -168,7 +165,7 @@ mod tests {
         assert_eq!(n_written, data.len());
         assert_eq!(buf, data);
         assert_eq!(bs.bytes_read(), n_read);
-        assert!(bs.buffer_empty());
+        assert!(bs.is_buffer_empty());
     }
 
     #[test]
@@ -199,7 +196,7 @@ mod tests {
             assert_eq!(bs.bytes_read(), i * chunk_size);
         }
 
-        assert!(bs.buffer_empty())
+        assert!(bs.is_buffer_empty())
     }
 
     #[test]
@@ -232,7 +229,7 @@ mod tests {
         let n_popped = bs.pop_output(99); // Request more than available
         assert_eq!(n_popped, 6);
         assert_eq!(bs.bytes_read(), 11);
-        assert!(bs.buffer_empty());
+        assert!(bs.is_buffer_empty());
     }
 
     #[test]
@@ -253,7 +250,7 @@ mod tests {
     fn test_close() {
         let mut bs = ByteStream::new(20);
         bs.close();
-        assert!(bs.closed());
+        assert!(bs.is_closed());
 
         // Attempt to write after closing
         let data = b"hello world";

@@ -36,7 +36,7 @@ fn speed_test(
     // Run simulation
     while !stream.eof() {
         if chunks.is_empty() {
-            if !stream.closed() {
+            if !stream.is_closed() {
                 stream.close();
             }
         } else if let Some(front) = chunks.front() {
