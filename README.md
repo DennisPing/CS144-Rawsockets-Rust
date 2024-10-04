@@ -1,7 +1,7 @@
 # CS144-Rawsockets-Rust
 
 ![Build Status](https://github.com/DennisPing/TCP-IP-Raw-Sockets-Rust/actions/workflows/rust.yml/badge.svg)
-[![codecov](https://codecov.io/gh/DennisPing/TCP-IP-Raw-Sockets-Rust/graph/badge.svg?token=Z0XXSP5MGP)](https://codecov.io/gh/DennisPing/TCP-IP-Raw-Sockets-Rust)
+[![codecov](https://codecov.io/gh/DennisPing/CS144-Rawsockets-Rust/graph/badge.svg?token=Z0XXSP5MGP)](https://codecov.io/gh/DennisPing/CS144-Rawsockets-Rust)
 
 ## Overview
 
