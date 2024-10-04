@@ -6,9 +6,9 @@ use std::io;
 use std::io::{Error, ErrorKind, Read};
 use std::time::Instant;
 
-fn speed_test(num_chunks: usize, capacity: usize, random_seed: u64) -> io::Result<()> {
+fn speed_test(num_chunks: usize, capacity: usize, random_seed: usize) -> io::Result<()> {
     // Generate random data
-    let mut rng = StdRng::seed_from_u64(random_seed);
+    let mut rng = StdRng::seed_from_u64(random_seed as u64);
     let mut data = vec![0u8; num_chunks * capacity];
     rng.fill_bytes(&mut data);
 
@@ -57,7 +57,8 @@ fn speed_test(num_chunks: usize, capacity: usize, random_seed: u64) -> io::Resul
 
     if !ra.get_output().eof() {
         return Err(Error::new(
-            ErrorKind::Other, "Reassembler did not close ByteStream when finished",
+            ErrorKind::Other,
+            "Reassembler did not close ByteStream when finished",
         ));
     }
 
@@ -74,7 +75,9 @@ fn speed_test(num_chunks: usize, capacity: usize, random_seed: u64) -> io::Resul
     let bits_per_sec = bytes_per_sec * 8.0;
     let gigabits_per_sec = bits_per_sec / 1e9;
 
-    println!("Reassembler to ByteStream with capacity={capacity} reached {gigabits_per_sec:.2} Gbit/s");
+    println!(
+        "Reassembler to ByteStream with capacity={capacity} reached {gigabits_per_sec:.2} Gbit/s"
+    );
 
     Ok(())
 }

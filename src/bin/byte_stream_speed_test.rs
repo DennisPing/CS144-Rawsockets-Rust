@@ -1,18 +1,20 @@
-use rand::RngCore;
+use rand::prelude::StdRng;
+use rand::{RngCore, SeedableRng};
 use rawhttpget::conn::ByteStream;
 use std::collections::VecDeque;
 use std::io;
-use std::io::{Error, ErrorKind, Write};
+use std::io::{Error, ErrorKind, Read, Write};
 use std::time::Instant;
 
 fn speed_test(
     input_len: usize,
     capacity: usize,
+    random_seed: usize,
     write_size: usize,
     read_size: usize,
 ) -> io::Result<()> {
     // Generate random data
-    let mut rng = rand::thread_rng();
+    let mut rng = StdRng::seed_from_u64(random_seed as u64);
     let mut data = vec![0u8; input_len];
     rng.fill_bytes(&mut data);
 
@@ -46,18 +48,7 @@ fn speed_test(
             }
         }
 
-        if stream.buffer_size() > 0 {
-            let to_read = usize::min(read_size, stream.buffer_size());
-            let peeked = stream.peek_output(to_read);
-            if peeked.is_empty() {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "peek_output returned empty data",
-                ));
-            }
-            output_buffer.extend_from_slice(&peeked);
-            stream.pop_output(to_read);
-        }
+        stream.read_to_end(&mut output_buffer)?;
     }
 
     // Stop timer
@@ -88,14 +79,15 @@ fn speed_test(
 fn main() {
     let input_len = 1e7 as usize; // 10 MB
     let capacity = 32768; // 32 KB
+    let random_seed = 789;
     let write_size = 1500; // MTU 1500 bytes
     let read_size = 128;
 
-    if let Err(e) = speed_test(input_len, capacity, write_size, read_size) {
+    if let Err(e) = speed_test(input_len, capacity, random_seed, write_size, read_size) {
         eprintln!("Speed test failed: {e}");
         std::process::exit(1);
     };
 
     // Result:
-    // ByteStream with capacity=32768, write_size=1500, read_size=128 reached 9.36 Gbit/s
+    // ByteStream with capacity=32768, write_size=1500, read_size=128 reached 15.40 Gbit/s
 }
