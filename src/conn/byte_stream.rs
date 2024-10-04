@@ -106,7 +106,7 @@ impl Write for ByteStream {
         self.bytes_written += to_write;
         Ok(to_write)
     }
-    
+
     fn flush(&mut self) -> io::Result<()> {
         Ok(()) // no-op because this is an in-memory data structure
     }

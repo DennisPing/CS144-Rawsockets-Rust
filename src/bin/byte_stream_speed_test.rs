@@ -78,8 +78,8 @@ fn speed_test(
     let gigabits_per_sec = bits_per_sec / 1e9;
 
     println!(
-        "ByteStream with capacity={}, write_size={}, read_size={} reached {:.2 } Gbit/s",
-        capacity, write_size, read_size, gigabits_per_sec
+        "ByteStream with capacity={capacity}, write_size={write_size}, \
+        read_size={read_size} reached {gigabits_per_sec:.2 } Gbit/s",
     );
 
     Ok(())
@@ -92,10 +92,10 @@ fn main() {
     let read_size = 128;
 
     if let Err(e) = speed_test(input_len, capacity, write_size, read_size) {
-        eprintln!("Speed test failed: {}", e);
+        eprintln!("Speed test failed: {e}");
         std::process::exit(1);
     };
 
-    // Speed test result:
-    // ByteStream with capacity=32768, write_size=1500, read_size=128 reached 8.44 Gbit/s
+    // Result:
+    // ByteStream with capacity=32768, write_size=1500, read_size=128 reached 9.36 Gbit/s
 }

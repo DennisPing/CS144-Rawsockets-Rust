@@ -25,7 +25,7 @@ impl Reassembler {
     }
 
     /// Insert a new byte segment into the `Reassembler`
-    pub fn insert(&mut self, data: Vec<u8>, seq_num: usize, is_last: bool) -> io::Result<()> {
+    pub fn insert(&mut self, seq_num: usize, data: Vec<u8>, is_last: bool) -> io::Result<()> {
         if data.is_empty() && !is_last {
             return Ok(());
         }
@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn test_insert_empty_data() {
         let mut ra = create_reassembler(32);
-        ra.insert(vec![], 0, false).unwrap();
+        ra.insert(0, vec![], false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         assert!(!ra.output.eof())
     }
@@ -250,7 +250,7 @@ mod tests {
         let mut ra = create_reassembler(5);
 
         // Insert first
-        ra.insert(b"Hello".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"Hello".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 5);
         assert_eq!(ra.next_byte_idx(), 5);
         assert_eq!(ra.bytes_pending(), 0);
@@ -258,7 +258,7 @@ mod tests {
         assert_eq!("Hello", actual);
 
         // Insert second
-        ra.insert(b"World".to_vec(), 5, false).unwrap();
+        ra.insert(5, b"World".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 10);
         assert_eq!(ra.next_byte_idx(), 10);
         assert_eq!(ra.bytes_pending(), 0);
@@ -266,7 +266,7 @@ mod tests {
         assert_eq!("World", actual);
 
         // Insert third
-        ra.insert(b"Honda".to_vec(), 10, true).unwrap();
+        ra.insert(10, b"Honda".to_vec(), true).unwrap();
         assert_eq!(ra.output.bytes_written(), 15);
         assert_eq!(ra.next_byte_idx(), 15);
         assert_eq!(ra.bytes_pending(), 0);
@@ -283,12 +283,12 @@ mod tests {
         let mut ra = create_reassembler(5);
 
         // Insert first
-        ra.insert(b"Hello".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"Hello".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 5);
         assert_eq!(ra.bytes_pending(), 0);
 
         // Insert second; no-op because capacity exceeded
-        ra.insert(b"World".to_vec(), 5, true).unwrap();
+        ra.insert(5, b"World".to_vec(), true).unwrap();
         assert_eq!(ra.output.bytes_written(), 5);
         assert_eq!(ra.bytes_pending(), 0);
 
@@ -297,7 +297,7 @@ mod tests {
         assert_eq!("Hello", actual);
 
         // Insert third; success
-        ra.insert(b"World".to_vec(), 5, true).unwrap();
+        ra.insert(5, b"World".to_vec(), true).unwrap();
         assert_eq!(ra.output.bytes_written(), 10);
         assert_eq!(ra.bytes_pending(), 0);
 
@@ -313,12 +313,12 @@ mod tests {
         let mut ra = create_reassembler(1);
 
         // Insert first
-        ra.insert(b"ab".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"ab".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 1);
         assert_eq!(ra.bytes_pending(), 0);
 
         // Insert second; no-op because capacity exceeded
-        ra.insert(b"ab".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"ab".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 1);
         assert_eq!(ra.bytes_pending(), 0);
 
@@ -328,7 +328,7 @@ mod tests {
         assert_eq!("a", actual);
 
         // Insert third
-        ra.insert(b"abc".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abc".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 2);
         assert_eq!(ra.bytes_pending(), 0);
 
@@ -342,21 +342,21 @@ mod tests {
     fn test_insert_beyond_capacity_with_different_data() {
         let mut ra = create_reassembler(2);
 
-        ra.insert(b"b".to_vec(), 1, false).unwrap();
+        ra.insert(1, b"b".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 1);
 
-        ra.insert(b"bX".to_vec(), 2, false).unwrap();
+        ra.insert(2, b"bX".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 1);
 
-        ra.insert(b"a".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"a".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 2);
         assert_eq!(ra.bytes_pending(), 0);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("ab", actual);
 
-        ra.insert(b"bc".to_vec(), 1, false).unwrap();
+        ra.insert(1, b"bc".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 3);
         assert_eq!(ra.bytes_pending(), 0);
         let actual = read_all_as_string(&mut ra);
@@ -367,17 +367,17 @@ mod tests {
     fn test_insert_last_segment_beyond_capacity() {
         let mut ra = create_reassembler(2);
 
-        ra.insert(b"bc".to_vec(), 1, true).unwrap();
+        ra.insert(1, b"bc".to_vec(), true).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 1);
 
-        ra.insert(b"a".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"a".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 2);
         assert_eq!(ra.bytes_pending(), 0);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("ab", actual);
 
-        ra.insert(b"bc".to_vec(), 1, true).unwrap();
+        ra.insert(1, b"bc".to_vec(), true).unwrap();
         assert_eq!(ra.output.bytes_written(), 3);
         assert_eq!(ra.bytes_pending(), 0);
         let actual = read_all_as_string(&mut ra);
@@ -390,14 +390,14 @@ mod tests {
     fn test_insert_junk_after_close() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
-        ra.insert(b"efgh".to_vec(), 4, true).unwrap();
+        ra.insert(0, b"abcd".to_vec(), false).unwrap();
+        ra.insert(4, b"efgh".to_vec(), true).unwrap();
         let actual = read_all_as_string(&mut ra);
         assert_eq!("abcdefgh", actual);
         assert!(ra.output.eof());
 
         // Verify code doesn't blow up
-        let result = ra.insert(b"zzz".to_vec(), 8, false);
+        let result = ra.insert(8, b"zzz".to_vec(), false);
         assert!(result.is_ok());
 
         // Verify nothing gets read
@@ -411,12 +411,12 @@ mod tests {
     fn test_sequential() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("abcd", actual);
 
-        ra.insert(b"efgh".to_vec(), 4, false).unwrap();
+        ra.insert(4, b"efgh".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("efgh", actual);
@@ -426,10 +426,10 @@ mod tests {
     fn test_sequential_combined() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
 
-        ra.insert(b"efgh".to_vec(), 4, false).unwrap();
+        ra.insert(4, b"efgh".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
 
         let actual = read_all_as_string(&mut ra);
@@ -444,7 +444,7 @@ mod tests {
         for i in 0..100 {
             let total_writes = 4 * i;
             assert_eq!(ra.output.bytes_written(), total_writes);
-            ra.insert(b"abcd".to_vec(), 4 * i, false).unwrap();
+            ra.insert(4 * i, b"abcd".to_vec(), false).unwrap();
             combined_data.push_str("abcd");
         }
 
@@ -459,7 +459,7 @@ mod tests {
         for i in 0..100 {
             let total_writes = 4 * i;
             assert_eq!(ra.output.bytes_written(), total_writes);
-            ra.insert(b"abcd".to_vec(), 4 * i, false).unwrap();
+            ra.insert(4 * i, b"abcd".to_vec(), false).unwrap();
             let actual = read_all_as_string(&mut ra);
             assert_eq!("abcd", actual);
         }
@@ -472,7 +472,7 @@ mod tests {
         let mut ra = create_reassembler(32);
 
         // Insert new data
-        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
 
         // Read out data
@@ -480,7 +480,7 @@ mod tests {
         assert_eq!("abcd", actual);
 
         // Insert duplicate data at same index
-        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
 
         // Read out data, should be empty string
@@ -493,25 +493,25 @@ mod tests {
         let mut ra = create_reassembler(32);
 
         // Insert new data
-        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("abcd", actual);
 
         // Insert data at index 4
-        ra.insert(b"abcd".to_vec(), 4, false).unwrap();
+        ra.insert(4, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("abcd", actual);
 
         // Insert duplicate data at index 0
-        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
 
         // Insert duplicate data at index 4
-        ra.insert(b"abcd".to_vec(), 4, false).unwrap();
+        ra.insert(4, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
@@ -523,7 +523,7 @@ mod tests {
 
         let data = b"abcdefgh";
 
-        ra.insert(data.to_vec(), 0, false).unwrap();
+        ra.insert(0, data.to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("abcdefgh", actual);
@@ -535,7 +535,7 @@ mod tests {
             let k = rng.gen_range(j..8);
 
             let chunk = &data[j..k];
-            ra.insert(chunk.to_vec(), j, false).unwrap();
+            ra.insert(j, chunk.to_vec(), false).unwrap();
             assert_eq!(ra.output.bytes_written(), 8);
 
             let actual = read_all_as_string(&mut ra);
@@ -548,13 +548,13 @@ mod tests {
     fn test_dup_overlapping_segments_beyond_existing_data() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"abcd".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcd".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("abcd", actual);
 
         // Insert overlapping data that goes beyond existing data
-        ra.insert(b"abcdef".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcdef".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 6);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("ef", actual);
@@ -566,7 +566,7 @@ mod tests {
     fn test_insert_with_initial_gap() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"b".to_vec(), 1, false).unwrap();
+        ra.insert(1, b"b".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
@@ -576,8 +576,8 @@ mod tests {
     fn test_fill_initial_gap() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"b".to_vec(), 1, false).unwrap();
-        ra.insert(b"a".to_vec(), 0, false).unwrap();
+        ra.insert(1, b"b".to_vec(), false).unwrap();
+        ra.insert(0, b"a".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 2);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("ab", actual);
@@ -587,12 +587,12 @@ mod tests {
     fn test_fill_gap_with_last() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"b".to_vec(), 1, true).unwrap();
+        ra.insert(1, b"b".to_vec(), true).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
 
-        ra.insert(b"a".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"a".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 2);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("ab", actual);
@@ -603,8 +603,8 @@ mod tests {
     fn test_fill_gap_with_overlapping_data() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"b".to_vec(), 1, false).unwrap();
-        ra.insert(b"ab".to_vec(), 0, false).unwrap();
+        ra.insert(1, b"b".to_vec(), false).unwrap();
+        ra.insert(0, b"ab".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 2);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("ab", actual);
@@ -614,23 +614,23 @@ mod tests {
     fn test_fill_multiple_gaps_with_chunks() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"b".to_vec(), 1, false).unwrap();
+        ra.insert(1, b"b".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
 
-        ra.insert(b"d".to_vec(), 3, false).unwrap();
+        ra.insert(3, b"d".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
 
-        ra.insert(b"abc".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abc".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("abcd", actual);
 
         // Insert empty data for last segment
-        ra.insert(b"".to_vec(), 4, true).unwrap();
+        ra.insert(4, b"".to_vec(), true).unwrap();
         assert_eq!(ra.output.bytes_written(), 4);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
@@ -642,8 +642,8 @@ mod tests {
     fn test_overlap_extend() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"Hello".to_vec(), 0, false).unwrap();
-        ra.insert(b"HelloWorld".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"Hello".to_vec(), false).unwrap();
+        ra.insert(0, b"HelloWorld".to_vec(), false).unwrap();
 
         assert_eq!(ra.output.bytes_written(), 10);
         let actual = read_all_as_string(&mut ra);
@@ -654,11 +654,11 @@ mod tests {
     fn test_overlap_extend_after_read() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"Hello".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"Hello".to_vec(), false).unwrap();
         let actual = read_all_as_string(&mut ra);
         assert_eq!("Hello", actual);
 
-        ra.insert(b"HelloWorld".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"HelloWorld".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 10);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("World", actual);
@@ -668,11 +668,11 @@ mod tests {
     fn test_overlap_fill_gap() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"World".to_vec(), 5, false).unwrap();
+        ra.insert(5, b"World".to_vec(), false).unwrap();
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
 
-        ra.insert(b"Hello".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"Hello".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 10);
         let actual = read_all_as_string(&mut ra);
         assert_eq!("HelloWorld", actual);
@@ -682,14 +682,14 @@ mod tests {
     fn test_overlap_partial() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"World".to_vec(), 5, false).unwrap();
+        ra.insert(5, b"World".to_vec(), false).unwrap();
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
 
-        ra.insert(b"Hello".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"Hello".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 10);
 
-        ra.insert(b"ldHondaCivic".to_vec(), 8, false).unwrap();
+        ra.insert(8, b"ldHondaCivic".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 20);
 
         let actual = read_all_as_string(&mut ra);
@@ -700,14 +700,14 @@ mod tests {
     fn test_overlap_between_two_pending() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"bc".to_vec(), 1, false).unwrap();
-        ra.insert(b"ef".to_vec(), 4, false).unwrap();
+        ra.insert(1, b"bc".to_vec(), false).unwrap();
+        ra.insert(4, b"ef".to_vec(), false).unwrap();
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 4);
 
-        ra.insert(b"cde".to_vec(), 2, false).unwrap();
+        ra.insert(2, b"cde".to_vec(), false).unwrap();
         let actual = read_all_as_string(&mut ra);
         assert_eq!("", actual);
         assert_eq!(ra.output.bytes_written(), 0);
@@ -716,7 +716,7 @@ mod tests {
         // _bc_ef
         // __cde_ (overlap in the middle between two pending)
 
-        ra.insert(b"a".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"a".to_vec(), false).unwrap();
         let actual = read_all_as_string(&mut ra);
         assert_eq!("abcdef", actual);
         assert_eq!(ra.output.bytes_written(), 6);
@@ -727,35 +727,35 @@ mod tests {
     fn test_overlap_many_pending() {
         let mut ra = create_reassembler(32);
 
-        ra.insert(b"efgh".to_vec(), 4, false).unwrap();
+        ra.insert(4, b"efgh".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 4);
 
-        ra.insert(b"op".to_vec(), 14, false).unwrap();
+        ra.insert(14, b"op".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 6);
 
-        ra.insert(b"s".to_vec(), 18, false).unwrap();
+        ra.insert(18, b"s".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
         assert_eq!(ra.bytes_pending(), 7);
 
-        ra.insert(b"a".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"a".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 1);
         assert_eq!(ra.bytes_pending(), 7);
 
-        ra.insert(b"abcde".to_vec(), 0, false).unwrap();
+        ra.insert(0, b"abcde".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
         assert_eq!(ra.bytes_pending(), 3);
 
-        ra.insert(b"opqrst".to_vec(), 14, false).unwrap();
+        ra.insert(14, b"opqrst".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
         assert_eq!(ra.bytes_pending(), 6);
 
-        ra.insert(b"op".to_vec(), 14, false).unwrap();
+        ra.insert(14, b"op".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 8);
         assert_eq!(ra.bytes_pending(), 6);
 
-        ra.insert(b"ijklmn".to_vec(), 8, false).unwrap();
+        ra.insert(8, b"ijklmn".to_vec(), false).unwrap();
         assert_eq!(ra.output.bytes_written(), 20);
         assert_eq!(ra.bytes_pending(), 0);
     }
@@ -797,7 +797,7 @@ mod tests {
             for (start, size) in segments {
                 let slice = &payload[start..(start + size)];
                 let is_last = start + size == total_len;
-                ra.insert(slice.to_vec(), start, is_last)
+                ra.insert(start, slice.to_vec(), is_last)
                     .expect("Insert into Reassembler failed");
             }
 
