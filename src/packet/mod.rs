@@ -1,16 +1,9 @@
-pub mod header;
-pub mod ip_flags;
-pub mod ip_header;
-pub mod rawsocket;
-pub mod tcp_flags;
-pub mod tcp_header;
+pub mod tcp_over_ip;
 
 // -- Re-export public structs --
 
-pub use ip_flags::IPFlags;
-pub use ip_header::IPHeader;
-pub use tcp_flags::TCPFlags;
-pub use tcp_header::TCPHeader;
+pub use crate::packet::tcp_over_ip::pack;
+pub use crate::packet::tcp_over_ip::unpack;
 
 // -- Unit test helpers --
 

@@ -1,4 +1,4 @@
-use crate::net::ip_flags::IPFlags;
+use crate::ip::flags::IPFlags;
 use std::net::Ipv4Addr;
 
 #[derive(Debug, Clone)]
@@ -93,7 +93,7 @@ impl IPHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::test_utils;
+    use crate::packet::test_utils;
 
     #[test]
     fn test_ip_header_to_bytes() {

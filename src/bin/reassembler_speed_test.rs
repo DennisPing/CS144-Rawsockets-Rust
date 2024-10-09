@@ -1,6 +1,7 @@
+use net::tcp::byte_stream::ByteStream;
+use net::tcp::reassembler::Reassembler;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
-use rawhttpget::conn::{ByteStream, Reassembler};
 use std::collections::VecDeque;
 use std::io;
 use std::io::{Error, ErrorKind, Read};
@@ -41,7 +42,7 @@ fn speed_test(num_chunks: usize, capacity: usize, random_seed: usize) -> io::Res
 
         loop {
             match ra.read(&mut buf) {
-                Ok(0) => break, // No more data to read at the moment
+                Ok(0) => break, // Done
                 Ok(n) => {
                     output_buffer.extend_from_slice(&buf[..n]);
                 }

@@ -1,5 +1,5 @@
-use crate::net::ip_header::IPHeader;
-use crate::net::tcp_flags::TCPFlags;
+use crate::ip::header::IPHeader;
+use crate::tcp::flags::TCPFlags;
 use std::vec;
 
 #[derive(Debug, Clone)]
@@ -118,7 +118,7 @@ impl TCPHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::test_utils;
+    use crate::packet::test_utils;
 
     #[test]
     fn test_tcp_header_to_bytes() {

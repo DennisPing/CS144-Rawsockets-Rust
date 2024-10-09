@@ -1,4 +1,5 @@
-use crate::net::{IPHeader, TCPHeader};
+use crate::ip::header::IPHeader;
+use crate::tcp::header::TCPHeader;
 use std::io::{Error, ErrorKind};
 
 /// Pack an `IPHeader` and `TCPHeader` into a byte vector.
@@ -38,16 +39,16 @@ pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::ip_flags::IPFlags;
-    use crate::net::tcp_flags::TCPFlags;
-    use crate::net::test_utils::*;
+    use crate::ip::flags::IPFlags;
+    use crate::packet::test_utils;
+    use crate::tcp::flags::TCPFlags;
     use std::net::Ipv4Addr;
 
     #[test]
     fn test_pack() {
-        let ip_bytes = hex::decode(get_ip_hex_with_payload()).unwrap();
-        let tcp_bytes = hex::decode(get_tcp_hex_with_payload()).unwrap();
-        let payload = hex::decode(giant_payload()).unwrap();
+        let ip_bytes = hex::decode(test_utils::get_ip_hex_with_payload()).unwrap();
+        let tcp_bytes = hex::decode(test_utils::get_tcp_hex_with_payload()).unwrap();
+        let payload = hex::decode(test_utils::giant_payload()).unwrap();
 
         let iph = IPHeader {
             version: 4,
@@ -86,9 +87,9 @@ mod tests {
 
     #[test]
     fn test_unpack() {
-        let ip_bytes = hex::decode(get_ip_hex_with_payload()).unwrap();
-        let tcp_bytes = hex::decode(get_tcp_hex_with_payload()).unwrap();
-        let payload = hex::decode(giant_payload()).unwrap();
+        let ip_bytes = hex::decode(test_utils::get_ip_hex_with_payload()).unwrap();
+        let tcp_bytes = hex::decode(test_utils::get_tcp_hex_with_payload()).unwrap();
+        let payload = hex::decode(test_utils::giant_payload()).unwrap();
 
         let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
         let result = unpack(&packet);
@@ -127,10 +128,10 @@ mod tests {
 
     #[test]
     fn test_unpack_corrupt_iph() {
-        let mut ip_bytes = hex::decode(get_ip_hex_with_payload()).unwrap();
+        let mut ip_bytes = hex::decode(test_utils::get_ip_hex_with_payload()).unwrap();
         ip_bytes[10] = 0xff; // Corrupt a byte
-        let tcp_bytes = hex::decode(get_tcp_hex_with_payload()).unwrap();
-        let payload = hex::decode(giant_payload()).unwrap();
+        let tcp_bytes = hex::decode(test_utils::get_tcp_hex_with_payload()).unwrap();
+        let payload = hex::decode(test_utils::giant_payload()).unwrap();
 
         let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
         let result = unpack(&packet);
@@ -143,10 +144,10 @@ mod tests {
 
     #[test]
     fn test_unpack_corrupt_tcph() {
-        let ip_bytes = hex::decode(get_ip_hex_with_payload()).unwrap();
-        let mut tcp_bytes = hex::decode(get_tcp_hex_with_payload()).unwrap();
+        let ip_bytes = hex::decode(test_utils::get_ip_hex_with_payload()).unwrap();
+        let mut tcp_bytes = hex::decode(test_utils::get_tcp_hex_with_payload()).unwrap();
         tcp_bytes[10] = 0xff; // Corrupt a byte
-        let payload = hex::decode(giant_payload()).unwrap();
+        let payload = hex::decode(test_utils::giant_payload()).unwrap();
 
         let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
         let result = unpack(&packet);
@@ -160,7 +161,7 @@ mod tests {
     // Difficult as fuck
     #[test]
     fn test_odd_tcp_segment_length() {
-        let payload = hex::decode(giant_payload_odd()).unwrap();
+        let payload = hex::decode(test_utils::giant_payload_odd()).unwrap();
 
         let iph = IPHeader {
             version: 4,

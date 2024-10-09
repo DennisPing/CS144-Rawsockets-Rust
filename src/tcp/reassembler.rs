@@ -1,4 +1,4 @@
-use crate::conn::byte_stream::ByteStream;
+use crate::tcp::byte_stream::ByteStream;
 use std::collections::BTreeMap;
 use std::io;
 use std::io::{Read, Write};
@@ -45,7 +45,7 @@ impl Reassembler {
         self.insert_buffer(seq_num, data)?;
 
         // Write as much as possible to the output stream
-        self.try_write()?;
+        self.write_output()?;
 
         Ok(())
     }
@@ -165,13 +165,13 @@ impl Reassembler {
             .collect()
     }
 
-    /// Attempt to write contiguous data from the buffer to the output `ByteStream`
-    fn try_write(&mut self) -> io::Result<()> {
+    /// Write contiguous data from the buffer to the output `ByteStream`
+    fn write_output(&mut self) -> io::Result<()> {
         while let Some(mut data) = self.segments.remove(&self.next_byte_idx) {
             let n = self.output.write(&data)?;
 
             if n == 0 {
-                // If unable to write to ByteStream, then re-insert the segment and break
+                // Unable to write to ByteStream, then re-insert the segment and break
                 self.segments.insert(self.next_byte_idx, data);
                 break;
             }
@@ -180,8 +180,6 @@ impl Reassembler {
                 // Partial write occurred; store the remaining data
                 let rem_data = data.split_off(n);
                 self.segments.insert(self.next_byte_idx + n, rem_data);
-
-                // Update `next_byte_idx` to the new position
                 self.next_byte_idx += n;
                 break;
             } else {
@@ -219,7 +217,7 @@ impl Read for Reassembler {
 
 #[cfg(test)]
 mod tests {
-    use crate::conn::{ByteStream, Reassembler};
+    use super::*;
     use rand::seq::SliceRandom;
     use rand::{Rng, RngCore};
     use std::io::Read;

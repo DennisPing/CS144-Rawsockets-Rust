@@ -28,7 +28,7 @@ impl IPFlags {
 
 #[cfg(test)]
 mod tests {
-    use crate::net::IPFlags;
+    use crate::ip::flags::IPFlags;
 
     #[test]
     fn test_ip_flags() {

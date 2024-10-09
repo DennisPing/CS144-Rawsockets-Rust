@@ -1,21 +1,23 @@
-use crate::conn::tcp_receiver::TCPReceiver;
-use crate::net::header;
-use crate::net::rawsocket;
-use crate::net::{IPFlags, IPHeader, TCPFlags, TCPHeader};
+use crate::ip::flags::IPFlags;
+use crate::ip::header::IPHeader;
+use crate::packet;
+use crate::socket::rawsocket;
+use crate::tcp::byte_stream::ByteStream;
+use crate::tcp::flags::TCPFlags;
+use crate::tcp::header::TCPHeader;
+use crate::tcp::reassembler::Reassembler;
+use crate::tcp::receiver::TCPReceiver;
 use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
-use nix::errno::Errno;
 use nix::sys::socket::SockProtocol;
-use nix::unistd::read;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::io::{Error, ErrorKind};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
-use std::num::Wrapping;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::time::Duration;
 
 #[derive(Debug)]
-pub struct TcpConn {
+pub struct TCPConn {
     pub hostname: String,
     pub local_addr: SocketAddrV4,
     pub remote_addr: SocketAddrV4,
@@ -25,7 +27,7 @@ pub struct TcpConn {
     rng: ThreadRng,
 }
 
-impl TcpConn {
+impl TCPConn {
     /// Set up a new `TcpConn` with the remote host. Does the 3-way handshake automatically.
     pub fn new(hostname: String, timeout: Duration) -> Result<Self, Error> {
         let local_ip = Self::lookup_local_ip()?;
@@ -40,7 +42,7 @@ impl TcpConn {
 
         rawsocket::set_timeout(&recv_fd, timeout)?;
 
-        let tcp_receiver = TCPReceiver::new(1024 * 1024 * 1);
+        let tcp_receiver = TCPReceiver::new(Reassembler::new(ByteStream::new(1024 * 1024 * 1)));
 
         Ok(Self {
             hostname,
@@ -156,7 +158,7 @@ impl TcpConn {
             payload: payload.to_vec(),
         };
 
-        header::pack(&iph, &tcph)
+        packet::pack(&iph, &tcph)
     }
 
     /// Resolve hostname to an IPv4 address.

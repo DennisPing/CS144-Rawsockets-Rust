@@ -75,6 +75,7 @@ cargo test
 ```bash
 cd target/release/
 ./byte_stream_speed_test
+./reassembler_speed_test
 ```
 
 ## Generate Documentation

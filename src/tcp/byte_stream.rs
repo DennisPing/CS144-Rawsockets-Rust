@@ -116,7 +116,7 @@ impl Write for ByteStream {
 
 #[cfg(test)]
 mod tests {
-    use crate::conn::byte_stream::ByteStream;
+    use super::*;
     use std::io::{ErrorKind, Read, Write};
 
     fn generate_data(size: usize) -> Vec<u8> {

@@ -1,6 +1,6 @@
+use net::tcp::byte_stream::ByteStream;
 use rand::prelude::StdRng;
 use rand::{RngCore, SeedableRng};
-use rawhttpget::conn::ByteStream;
 use std::collections::VecDeque;
 use std::io;
 use std::io::{Error, ErrorKind, Read, Write};
