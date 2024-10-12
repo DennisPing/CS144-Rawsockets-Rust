@@ -141,11 +141,11 @@ mod tests {
         assert_eq!(bs.remaining_capacity(), 10);
 
         let data = generate_data(4);
-        bs.write(&data).unwrap();
+        bs.write_all(&data).unwrap();
         assert_eq!(bs.remaining_capacity(), 6);
 
         let data = generate_data(6);
-        bs.write(&data).unwrap();
+        bs.write_all(&data).unwrap();
         assert_eq!(bs.remaining_capacity(), 0);
 
         assert_eq!(bs.buffer_size(), 10);
@@ -218,7 +218,7 @@ mod tests {
     fn test_pop_output() {
         let mut bs = ByteStream::new(20);
         let data = b"hello world";
-        bs.write(data).unwrap();
+        bs.write_all(data).unwrap();
         assert_eq!(bs.buffer_size(), data.len());
 
         let n_popped = bs.pop_output(5);
@@ -236,7 +236,7 @@ mod tests {
     fn test_peek_output() {
         let mut bs = ByteStream::new(20);
         let data = b"hello world";
-        bs.write(data).unwrap();
+        bs.write_all(data).unwrap();
         assert_eq!(bs.buffer_size(), data.len());
 
         let peeked = bs.peek_output(5);
@@ -266,10 +266,10 @@ mod tests {
 
         // Write and read all data without closing
         let data = b"hello world";
-        bs.write(data).unwrap();
+        bs.write_all(data).unwrap();
 
         let mut buf = vec![0; data.len()];
-        bs.read(&mut buf).unwrap();
+        bs.read_exact(&mut buf).unwrap();
         assert!(!bs.eof());
 
         bs.close();
@@ -281,24 +281,24 @@ mod tests {
         let mut bs = ByteStream::new(20);
         let data1 = b"abc";
         let data2 = b"defg";
-        bs.write(data1).unwrap();
-        bs.write(data2).unwrap();
+        bs.write_all(data1).unwrap();
+        bs.write_all(data2).unwrap();
         assert_eq!(bs.buffer_size(), 7);
 
         // Read 2 bytes
         let mut read_buf = vec![0; 2];
-        bs.read(&mut read_buf).unwrap();
+        bs.read_exact(&mut read_buf).unwrap();
         assert_eq!(read_buf, b"ab");
         assert_eq!(bs.buffer_size(), 5);
 
         // Write more bytes
         let data3 = b"hi";
-        bs.write(data3).unwrap();
+        bs.write_all(data3).unwrap();
         assert_eq!(bs.buffer_size(), 7);
 
         // Now make contiguous and read all
         let mut read_buf = vec![0; 7];
-        bs.read(&mut read_buf).unwrap();
+        bs.read_exact(&mut read_buf).unwrap();
         assert_eq!(read_buf, b"cdefghi");
 
         assert!(bs.flush().is_ok()); // No-op flush

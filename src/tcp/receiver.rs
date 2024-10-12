@@ -24,11 +24,12 @@ impl TCPReceiver {
     }
 
     pub fn recv(&mut self, tcph: TCPHeader) -> io::Result<usize> {
+        // self.reassembler.insert(1, &tcph.payload, false)?;
         Ok(tcph.payload.len())
     }
 
     pub fn send(&mut self) -> TCPHeader {
-        return TCPHeader {
+        TCPHeader {
             src_port: 0,
             dst_port: 0,
             seq_num: 0,
@@ -41,7 +42,7 @@ impl TCPReceiver {
             urgent: 0,
             options: Box::from([]),
             payload: Box::from([]),
-        };
+        }
     }
 }
 
