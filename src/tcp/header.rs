@@ -2,7 +2,7 @@ use crate::ip::header::IPHeader;
 use crate::tcp::flags::TCPFlags;
 use std::vec;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TCPHeader {
     pub src_port: u16,
     pub dst_port: u16,
@@ -14,8 +14,8 @@ pub struct TCPHeader {
     pub window: u16,
     pub checksum: u16,
     pub urgent: u16,
-    pub options: Vec<u8>,
-    pub payload: Vec<u8>, // Append payload to end of TCP header for ease of use
+    pub options: Box<[u8]>,
+    pub payload: Box<[u8]>, // Append payload to end of TCP header for ease of use
 }
 
 impl TCPHeader {
@@ -56,8 +56,8 @@ impl TCPHeader {
         let urgent = u16::from_be_bytes([data[18], data[19]]);
 
         let header_len = data_offset as usize * 4;
-        let options = data[20..header_len].to_vec();
-        let payload = data[header_len..].to_vec();
+        let options = Box::from(&data[20..header_len]);
+        let payload = Box::from(&data[header_len..]);
 
         Self {
             src_port,
@@ -133,8 +133,8 @@ mod tests {
             window: 65535,
             checksum: 37527,
             urgent: 0,
-            options: hex::decode("020405b4010303060101080abb6879f80000000004020000").unwrap(),
-            payload: vec![],
+            options: Box::from(hex::decode("020405b4010303060101080abb6879f80000000004020000").unwrap()),
+            payload: Box::from([]),
         };
 
         // Get the IP header in order to build TCP header
@@ -167,9 +167,9 @@ mod tests {
         assert_eq!(tcph.checksum, 37527);
         assert_eq!(tcph.urgent, 0);
         assert_eq!(
-            tcph.options,
+            *tcph.options,
             hex::decode("020405b4010303060101080abb6879f80000000004020000").unwrap()
         );
-        assert_eq!(tcph.payload, &[])
+        assert_eq!(*tcph.payload, [])
     }
 }

@@ -76,8 +76,8 @@ mod tests {
             window: 235,
             checksum: 29098,
             urgent: 0,
-            options: hex::decode("0101080abeb95f0abb687a45").unwrap(),
-            payload: payload.clone(),
+            options: Box::from(hex::decode("0101080abeb95f0abb687a45").unwrap()),
+            payload: Box::from(payload.clone()),
         };
 
         let packet = pack(&iph, &tcph);
@@ -120,10 +120,10 @@ mod tests {
         assert_eq!(tcph.checksum, 29098);
         assert_eq!(tcph.urgent, 0);
         assert_eq!(
-            tcph.options,
+            *tcph.options,
             hex::decode("0101080abeb95f0abb687a45").unwrap()
         );
-        assert_eq!(tcph.payload, payload)
+        assert_eq!(*tcph.payload, payload)
     }
 
     #[test]
@@ -189,8 +189,8 @@ mod tests {
             window: 235,
             checksum: 47864,
             urgent: 0,
-            options: hex::decode("0101080afdc076540198f657").unwrap(),
-            payload: payload.clone(),
+            options: Box::from(hex::decode("0101080afdc076540198f657").unwrap()),
+            payload: Box::from(payload),
         };
 
         let packet = pack(&iph, &tcph);

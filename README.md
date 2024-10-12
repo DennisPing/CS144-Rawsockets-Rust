@@ -25,7 +25,6 @@ Done for self-learning purposes.
 
 - Linux
 - Rust 1.69+
-- No TUN/TAP virtual interface required
 
 ## Required System Changes
 
@@ -34,15 +33,33 @@ Done for self-learning purposes.
     ```bash
     sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP
     ```
+   
+2. Find your "network interface" logical name
+   ```bash
+   sudo lshw -class network
+   
+   *-network                 
+    description: Wireless interface
+    product: Wi-Fi 6 AX200
+    vendor: Intel Corporation
+    physical id: 0
+    bus info: pci@0000:04:00.0
+    logical name: wlp4s0 <--- Use this name
+    version: 1a
+    serial: 50:e0:85:89:ca:b5
+    width: 64 bits
+    clock: 33MHz
+    ... (omitted)
+   ```
 
-2. Find your "network interface" name using: `ifconfig -a` and disable `gro, tx, rx`
+3. Disable `gro, tx, rx`
 
     ```bash
     sudo ethtool -K <network interface> gro off
     sudo ethtool -K <network interface> tx off rx off
     ```
 
-3. Example
+4. Example
 
     ```bash
     sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP

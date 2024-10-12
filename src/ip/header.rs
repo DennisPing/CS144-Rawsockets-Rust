@@ -1,7 +1,7 @@
 use crate::ip::flags::IPFlags;
 use std::net::Ipv4Addr;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct IPHeader {
     pub version: u8, // Always 4 for IPv4
     pub ihl: u8,     // Always 5 since we have no options

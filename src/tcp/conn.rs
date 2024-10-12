@@ -154,8 +154,8 @@ impl TCPConn {
             window: 65500u16,
             checksum: 0,
             urgent: 0,
-            options: tcp_options.to_vec(),
-            payload: payload.to_vec(),
+            options: Box::from(tcp_options),
+            payload: Box::from(payload),
         };
 
         packet::pack(&iph, &tcph)

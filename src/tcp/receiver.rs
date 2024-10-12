@@ -39,8 +39,8 @@ impl TCPReceiver {
             window: 0,
             checksum: 0,
             urgent: 0,
-            options: vec![],
-            payload: vec![],
+            options: Box::from([]),
+            payload: Box::from([]),
         };
     }
 }
