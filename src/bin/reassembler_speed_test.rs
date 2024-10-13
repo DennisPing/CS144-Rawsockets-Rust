@@ -38,7 +38,7 @@ fn speed_test(num_chunks: usize, capacity: usize, random_seed: usize) -> io::Res
 
     // Run simulation
     while let Some((seq_num, segment, is_last)) = chunks.pop_front() {
-        ra.insert(seq_num, segment.into(), is_last)?;
+        ra.insert(seq_num, segment, is_last)?;
 
         loop {
             match ra.read(&mut buf) {
@@ -94,5 +94,5 @@ fn main() {
     }
 
     // Result:
-    // Reassembler to ByteStream with capacity=1500 reached 11.63 Gbit/s
+    // Reassembler to ByteStream with capacity=1500 reached 12.04 Gbit/s
 }
