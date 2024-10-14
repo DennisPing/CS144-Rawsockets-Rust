@@ -48,6 +48,7 @@ mod tests {
     use rand::distributions::Distribution;
     use rand::distributions::Uniform;
     use rand::Rng;
+    use rayon::prelude::*;
     use super::*;
 
     // -- Test wrapping --
@@ -203,14 +204,15 @@ mod tests {
             assert_eq!(Wrap32::wrap(value, isn).unwrap(isn, checkpoint), value)
         }
 
-        let mut rng = rand::thread_rng();
         let n_reps = 1_000_000;
         let dist31minus1 = Uniform::from(0u32..=(1u32 << 31) - 1);
         let dist32 = Uniform::from(0u32..=u32::MAX);
         let big_offset: u64 = (1u64 << 31) - 1;
         let dist63 = Uniform::from(big_offset..=(1u64 << 63));
 
-        for _ in 0..n_reps {
+        // Run parallel tests because we don't have all the time in the world
+        (0..n_reps).into_par_iter().for_each(|_| {
+            let mut rng = rand::thread_rng();
             let isn_value = dist32.sample(&mut rng);
             let isn = Wrap32::new(isn_value);
             let val = dist63.sample(&mut rng);
@@ -223,6 +225,6 @@ mod tests {
             check_roundtrip(isn, val - offset, val);
             check_roundtrip(isn, val + big_offset, val);
             check_roundtrip(isn, val - big_offset, val);
-        }
+        });
     }
 }
