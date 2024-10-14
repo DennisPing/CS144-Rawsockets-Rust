@@ -15,7 +15,7 @@ impl Wrap32 {
 
     /// Wrap an absolute `seq_no` given an `initial seq_no`
     pub fn wrap(n: u64, isn: Wrap32) -> Self {
-        Wrap32::new(((n + isn.value as u64) & 0xFFFF_FFFF) as u32)
+        Wrap32::new((n + isn.value as u64) as u32)
     }
 
     /// Unwrap the given `initial seq_no` to an absolute `seq_no` closest to the `checkpoint`
@@ -45,6 +45,9 @@ impl Add for Wrap32 {
 
 #[cfg(test)]
 mod tests {
+    use rand::distributions::Distribution;
+    use rand::distributions::Uniform;
+    use rand::Rng;
     use super::*;
 
     // -- Test wrapping --
@@ -135,7 +138,7 @@ mod tests {
     #[test]
     fn test_unwrap_max_value_with_max_isn_returns_half_wrap() {
         let unwrapped = Wrap32::new(u32::MAX).unwrap(Wrap32::new(i32::MAX as u32), 0);
-        assert_eq!(unwrapped, (1u64) << 31);
+        assert_eq!(unwrapped, 1u64 << 31);
     }
 
     #[test]
@@ -160,5 +163,66 @@ mod tests {
         let y = Wrap32::new(1);
         let z = Wrap32::new(0);
         assert_eq!(x + y, z);
+    }
+
+    // -- Test compare --
+
+    #[test]
+
+    fn test_equality() {
+        let wrap_a = Wrap32::new(3);
+        let wrap_b = Wrap32::new(1);
+
+        assert_ne!(wrap_a, wrap_b);
+        assert_eq!(wrap_a != wrap_b, true);
+        assert_eq!(wrap_a == wrap_b, false);
+    }
+
+    #[test]
+    fn test_equality_random() {
+        let n_reps = 32768;
+        let mut rng = rand::thread_rng();
+        for _ in 0..n_reps {
+            let n: u32 = rng.gen();
+            let diff: u8 = rng.gen();
+            let m: u32 = n + diff as u32;
+
+            let wrap_n = Wrap32::new(n);
+            let wrap_m = Wrap32::new(m);
+
+            assert_eq!(wrap_n == wrap_m, n == m);
+            assert_eq!(wrap_n != wrap_m, n != m);
+        }
+    }
+
+    // -- Test roundtrip --
+
+    #[test]
+    fn test_roundtrip() {
+        fn check_roundtrip(isn: Wrap32, value: u64, checkpoint: u64) {
+            assert_eq!(Wrap32::wrap(value, isn).unwrap(isn, checkpoint), value)
+        }
+
+        let mut rng = rand::thread_rng();
+        let n_reps = 1_000_000;
+        let dist31minus1 = Uniform::from(0u32..=(1u32 << 31) - 1);
+        let dist32 = Uniform::from(0u32..=u32::MAX);
+        let big_offset: u64 = (1u64 << 31) - 1;
+        let dist63 = Uniform::from(big_offset..=(1u64 << 63));
+
+        for _ in 0..n_reps {
+            let isn_value = dist32.sample(&mut rng);
+            let isn = Wrap32::new(isn_value);
+            let val = dist63.sample(&mut rng);
+            let offset = dist31minus1.sample(&mut rng) as u64;
+
+            check_roundtrip(isn, val, val);
+            check_roundtrip(isn, val + 1, val);
+            check_roundtrip(isn, val - 1, val);
+            check_roundtrip(isn, val + offset, val);
+            check_roundtrip(isn, val - offset, val);
+            check_roundtrip(isn, val + big_offset, val);
+            check_roundtrip(isn, val - big_offset, val);
+        }
     }
 }
