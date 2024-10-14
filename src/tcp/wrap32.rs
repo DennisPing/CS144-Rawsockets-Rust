@@ -6,6 +6,9 @@ pub struct Wrap32 {
 }
 
 impl Wrap32 {
+    const WRAP_SIZE: u64 = 1 << 32;
+    const HALF_WRAP: u64 = 1 << 31;
+
     pub fn new(value: u32) -> Self {
         Wrap32 { value }
     }
@@ -17,17 +20,16 @@ impl Wrap32 {
 
     /// Unwrap the given `initial seq_no` to an absolute `seq_no` closest to the `checkpoint`
     pub fn unwrap(&self, isn: Wrap32, checkpoint: u64) -> u64 {
-        let wrap_size: u64 = 1 << 32;
-        let half_wrap: u64 = wrap_size / 2;
+        // ChatGPT black magic optimization :)
 
         // Calculate the relative sequence number
         let relative = self.value.wrapping_sub(isn.value) as u64;
 
-        // Calculate the number of wraps `k` to get closest to checkpoint
-        let k = (checkpoint + half_wrap).saturating_sub(relative) / wrap_size;
+        // Calculate the number of wraps `k` to get closest to checkpoint using bitwise shift
+        let k = (checkpoint + Self::HALF_WRAP).saturating_sub(relative) >> 32;
 
         // Calculate the absolute sequence number
-        relative + k * wrap_size
+        relative + k * Self::WRAP_SIZE
     }
 }
 
