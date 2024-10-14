@@ -3,14 +3,14 @@ use crate::tcp::header::TCPHeader;
 use crate::tcp::reassembler::Reassembler;
 use std::io;
 use std::io::{Error, ErrorKind, Read, Write};
-use std::num::Wrapping;
+use crate::tcp::wrap32::Wrap32;
 
 #[derive(Debug)]
 pub struct TCPReceiver {
     syn: bool,
     fin: bool,
     reassembler: Reassembler,   // Handles TCP segments
-    isn: Option<Wrapping<u32>>, // Initial seq number
+    isn: Option<Wrap32>, // Initial seq number
 }
 
 impl TCPReceiver {
@@ -22,6 +22,13 @@ impl TCPReceiver {
             isn: None,
         }
     }
+
+    /*
+    TCP receiver tells the other end:
+        - ack no
+        - window size
+        - rst flag
+    */
 
     pub fn recv(&mut self, tcph: TCPHeader) -> io::Result<usize> {
         // self.reassembler.insert(1, &tcph.payload, false)?;

@@ -5,3 +5,4 @@ pub mod header;
 pub mod reassembler;
 pub mod receiver;
 pub mod state;
+mod wrap32;

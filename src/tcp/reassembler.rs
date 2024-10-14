@@ -6,10 +6,10 @@ use std::io::{Read, Write};
 #[derive(Debug)]
 pub struct Reassembler {
     segments: BTreeMap<usize, Box<[u8]>>, // Out-of-order segments. key = start index
-    output: ByteStream,                 // The assembled ByteStream, ready to be read
-    next_byte_idx: usize,               // The next byte index expected to write
-    last_byte_idx: Option<usize>,       // The last byte index, if known
-    last_recvd: bool,                   // Has the last segment been received?
+    output: ByteStream,                   // The assembled ByteStream, ready to be read
+    next_byte_idx: usize,                 // The next byte index expected to write
+    last_byte_idx: Option<usize>,         // The last byte index, if known
+    last_recvd: bool,                     // Has the last segment been received?
 }
 
 impl Reassembler {

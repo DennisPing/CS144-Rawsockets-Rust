@@ -16,7 +16,7 @@ fn speed_test(num_chunks: usize, capacity: usize, random_seed: usize) -> io::Res
     // Split data up into segments
     let mut chunks: VecDeque<(usize, &[u8], bool)> = VecDeque::new();
     for i in (0..data.len()).step_by(capacity) {
-        for offset in 0..3 {
+        for offset in [2, 0, 1] {
             let start = i + offset;
             if start > data.len() {
                 continue; // Skip if start exceeds data length
