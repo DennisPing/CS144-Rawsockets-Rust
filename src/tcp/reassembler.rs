@@ -68,10 +68,6 @@ impl Reassembler {
 
     /// Insert data into the buffer; merging overlapping segments
     fn insert_buffer(&mut self, seq_num: usize, data: &[u8]) -> io::Result<()> {
-        if data.is_empty() {
-            return Ok(());
-        }
-
         let last_idx = seq_num + data.len();
 
         // Ignore the segment if it's entirely before the next expected byte
@@ -179,7 +175,7 @@ impl Reassembler {
 
             if n < data.len() {
                 // Partial write occurred; store the remaining data
-                let rem_data = data.split_at(n).0;
+                let rem_data = data.split_at(n).1;
                 self.segments.insert(self.next_byte_idx + n, Box::from(rem_data));
                 self.next_byte_idx += n;
                 break;
@@ -239,9 +235,9 @@ mod tests {
     #[test]
     fn test_insert_empty_data() {
         let mut ra = create_reassembler(32);
-        ra.insert(0, [], false).unwrap(); // Now you can pass a slice directly
+        ra.insert(0, [], false).unwrap();
         assert_eq!(ra.output.bytes_written(), 0);
-        assert!(!ra.output.eof())
+        assert!(!ra.output.eof());
     }
 
     #[test]
@@ -249,7 +245,7 @@ mod tests {
         let mut ra = create_reassembler(5);
 
         // Insert first
-        ra.insert(0, *b"Hello", false).unwrap(); // Pass byte slice directly
+        ra.insert(0, *b"Hello", false).unwrap();
         assert_eq!(ra.output.bytes_written(), 5);
         assert_eq!(ra.next_byte_idx(), 5);
         assert_eq!(ra.bytes_pending(), 0);

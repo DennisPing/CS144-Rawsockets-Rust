@@ -210,7 +210,7 @@ mod tests {
         let big_offset: u64 = (1u64 << 31) - 1;
         let dist63 = Uniform::from(big_offset..=(1u64 << 63));
 
-        // Run parallel tests because we don't have all the time in the world
+        // Run parallel tests because we don't have all day
         (0..n_reps).into_par_iter().for_each(|_| {
             let mut rng = rand::thread_rng();
             let isn_value = dist32.sample(&mut rng);
