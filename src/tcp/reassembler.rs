@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 
 #[derive(Debug)]
 pub struct Reassembler {
-    segments: BTreeMap<usize, Vec<u8>>, // Out-of-order segments. key = start index
+    segments: BTreeMap<usize, Vec<u8>>,   // Out-of-order segments. key = start index
     output: ByteStream,                   // The assembled ByteStream, ready to be read
     next_byte_idx: usize,                 // The next byte index expected to write
     last_byte_idx: Option<usize>,         // The last byte index, if known
@@ -18,7 +18,7 @@ impl Reassembler {
             segments: BTreeMap::new(),
             output,
             next_byte_idx: 0,
-            last_byte_idx: None, /* dsf */
+            last_byte_idx: None,
         }
     }
 
@@ -104,7 +104,7 @@ impl Reassembler {
 
         // If there are no overlapping segments, just insert the new window directly
         if overlapping_keys.is_empty() {
-            self.segments.insert(buffer_start, window.into());
+            self.segments.insert(buffer_start, Vec::from(window));
             return Ok(());
         }
 
@@ -135,7 +135,7 @@ impl Reassembler {
         // Insert the merged segment back into the BTreeMap
         self.segments.insert(merge_start, merged.to_vec());
 
-        // Time complexity
+        // Time complexity:
         // Worse case: O(k log n + k * m)
         //      where k = number of overlapping segments and m = avg segment size
         // Avg case: O(log n)

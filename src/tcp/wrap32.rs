@@ -26,8 +26,6 @@ impl Wrap32 {
 
     /// Unwrap the given `initial seq_no` to an absolute `seq_no` closest to the `checkpoint`
     pub fn unwrap(&self, isn: Wrap32, checkpoint: u64) -> u64 {
-        // ChatGPT black magic optimization :)
-
         // Calculate the relative sequence number
         let relative = self.value.wrapping_sub(isn.value) as u64;
 

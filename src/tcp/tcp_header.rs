@@ -19,25 +19,6 @@ pub struct TCPHeader {
     pub payload: Vec<u8>, // Append payload to end of TCP header for ease of use
 }
 
-impl Default for TCPHeader {
-    fn default() -> Self {
-        TCPHeader {
-            src_port: 0,
-            dst_port: 0,
-            seq_no: Wrap32::new(0),
-            ack_no: Wrap32::new(0),
-            data_offset: 0,
-            reserved: 0,
-            flags: TCPFlags::ACK,
-            window: 0,
-            checksum: 0,
-            urgent: 0,
-            options: vec![],
-            payload: vec![],
-        }
-    }
-}
-
 impl TCPHeader {
     /// Convert a `TCPHeader` into a byte vector.
     pub fn serialize(&self, buf: &mut [u8], iph: &IPHeader) -> Result<usize, HeaderError> {
@@ -144,18 +125,38 @@ impl TCPHeader {
         sum += data.len() as u32;
 
         // Sum the TCP Header and payload
-        for i in (0..data.len() - 1).step_by(2) {
-            sum += ((data[i] as u32) << 8) | (data[i + 1] as u32);
-        }
-
-        // If odd length, add the last byte
-        if data.len() % 2 != 0 {
-            sum += (data[data.len() - 1] as u32) << 8;
-        }
+        sum += data
+            .chunks(2)
+            .map(|chunk| {
+                if chunk.len() == 2 {
+                    u16::from_be_bytes([chunk[0], chunk[1]]) as u32
+                } else {
+                    (chunk[0] as u32) << 8
+                }
+            }).sum::<u32>();
 
         // Fold the carry bits
         let folded = (sum & 0xffff) + (sum >> 16);
         !folded as u16
+    }
+}
+
+impl Default for TCPHeader {
+    fn default() -> Self {
+        TCPHeader {
+            src_port: 0,
+            dst_port: 0,
+            seq_no: Wrap32::new(0),
+            ack_no: Wrap32::new(0),
+            data_offset: 0,
+            reserved: 0,
+            flags: TCPFlags::ACK,
+            window: 0,
+            checksum: 0,
+            urgent: 0,
+            options: vec![],
+            payload: vec![],
+        }
     }
 }
 
