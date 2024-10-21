@@ -1,36 +1,42 @@
-use crate::ip::header::IPHeader;
-use crate::tcp::header::TCPHeader;
-use std::io::{Error, ErrorKind};
+use crate::ip::ip_header::IPHeader;
+use crate::tcp::tcp_header::TCPHeader;
+use crate::packet::errors::HeaderError;
 
-/// Pack an `IPHeader` and `TCPHeader` into a byte vector.
-pub fn pack(iph: &IPHeader, tcph: &TCPHeader) -> Vec<u8> {
-    // Allocate entire vector
-    let mut packet = vec![0u8; iph.total_len as usize];
-
-    packet[0..20].copy_from_slice(&iph.to_bytes());
-    packet[20..].copy_from_slice(&tcph.to_bytes(iph));
-    packet
+/// Wrap an `IPHeader` and `TCPHeader` into a packet. Zero allocation.
+pub fn wrap_into(iph: &IPHeader, tcph: &TCPHeader, packet: &mut [u8]) -> Result<usize, HeaderError> {
+    let ip_len = iph.serialize(&mut packet[0..20])?;
+    let tcp_length = tcph.serialize(&mut packet[20..], iph)?;
+    Ok(ip_len + tcp_length)
 }
 
-/// Unpack a byte vector into an `IPHeader` and `TCPHeader`.
-pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), Error> {
-    if packet.len() < 20 {
-        return Err(Error::from(ErrorKind::InvalidData));
-    }
+/// Wrap an `IPHeader` and `TCPHeader` into a packet. Allocs a new `Vec<u8>` for convenience.
+pub fn wrap(iph: &IPHeader, tcph: &TCPHeader) -> Result<Vec<u8>, HeaderError> {
+    let tcp_len = tcph.data_offset as usize * 4 + tcph.payload.len();
+    let total_len = 20 + tcp_len;
+    let mut packet = vec![0u8; total_len];
 
-    let iph_bytes = &packet[0..20];
-    if IPHeader::checksum(iph_bytes) != 0 {
-        return Err(Error::new(ErrorKind::Other, "Bad IP checksum"));
-    }
+    wrap_into(iph, tcph, &mut packet)?;
+    Ok(packet)
+}
 
-    let iph = IPHeader::from_bytes(iph_bytes);
+/// Unwrap a packet into `IPHeader` and `TCPHeader` objects. Zero allocation.
+pub fn unwrap_from(packet: &[u8], iph: &mut IPHeader, tcph: &mut TCPHeader) -> Result<usize, HeaderError> {
+    let parsed_iph = IPHeader::parse(&packet[0..20])?;
+    let total_len = parsed_iph.total_len as usize;
+    *iph = parsed_iph;
 
-    let tcp_bytes = &packet[20..];
-    if TCPHeader::checksum(tcp_bytes, &iph) != 0 {
-        return Err(Error::new(ErrorKind::Other, "Bad TCP checksum"));
-    }
+    let parsed_tcph = TCPHeader::parse(&packet[20..total_len], iph)?;
+    *tcph = parsed_tcph;
 
-    let tcph = TCPHeader::from_bytes(tcp_bytes);
+    Ok(total_len)
+}
+
+/// Unpack a byte vector into an `IPHeader` and `TCPHeader`. Allocs new headers for convenience.
+pub fn unwrap(packet: &[u8]) -> Result<(IPHeader, TCPHeader), HeaderError> {
+    let mut iph = IPHeader::default();
+    let mut tcph = TCPHeader::default();
+
+    unwrap_from(packet, &mut iph, &mut tcph)?;
     Ok((iph, tcph))
 }
 
@@ -39,10 +45,11 @@ pub fn unpack(packet: &[u8]) -> Result<(IPHeader, TCPHeader), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ip::flags::IPFlags;
+    use crate::ip::ip_flags::IPFlags;
     use crate::packet::test_utils;
-    use crate::tcp::flags::TCPFlags;
+    use crate::tcp::tcp_flags::TCPFlags;
     use std::net::Ipv4Addr;
+    use crate::tcp::wrap32::Wrap32;
 
     #[test]
     fn test_pack() {
@@ -68,19 +75,19 @@ mod tests {
         let tcph = TCPHeader {
             src_port: 80,
             dst_port: 50871,
-            seq_num: 1654659911,
-            ack_num: 2753994376,
+            seq_no: Wrap32::new(1654659911),
+            ack_no: Wrap32::new(2753994376),
             data_offset: 8,
             reserved: 0,
             flags: TCPFlags::ACK,
             window: 235,
             checksum: 29098,
             urgent: 0,
-            options: Box::from(hex::decode("0101080abeb95f0abb687a45").unwrap()),
-            payload: Box::from(payload.clone()),
+            options: hex::decode("0101080abeb95f0abb687a45").unwrap(),
+            payload: payload.clone(),
         };
 
-        let packet = pack(&iph, &tcph);
+        let packet = wrap(&iph, &tcph).unwrap();
         let expected = [ip_bytes, tcp_bytes, payload].concat();
         assert_eq!(expected, packet);
     }
@@ -92,7 +99,7 @@ mod tests {
         let payload = hex::decode(test_utils::giant_payload()).unwrap();
 
         let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
-        let result = unpack(&packet);
+        let result = unwrap(&packet);
         assert!(result.is_ok());
 
         let (iph, tcph) = result.unwrap();
@@ -111,8 +118,8 @@ mod tests {
 
         assert_eq!(tcph.src_port, 80);
         assert_eq!(tcph.dst_port, 50871);
-        assert_eq!(tcph.seq_num, 1654659911);
-        assert_eq!(tcph.ack_num, 2753994376);
+        assert_eq!(tcph.seq_no, Wrap32::new(1654659911));
+        assert_eq!(tcph.ack_no, Wrap32::new(2753994376));
         assert_eq!(tcph.data_offset, 8);
         assert_eq!(tcph.reserved, 0);
         assert_eq!(tcph.flags, TCPFlags::ACK);
@@ -134,12 +141,11 @@ mod tests {
         let payload = hex::decode(test_utils::giant_payload()).unwrap();
 
         let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
-        let result = unpack(&packet);
+        let result = unwrap(&packet);
         assert!(result.is_err());
 
         let err = result.unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Other);
-        assert_eq!(err.into_inner().unwrap().to_string(), "Bad IP checksum")
+        assert_eq!(err, HeaderError::BadChecksum("IP".to_string()));
     }
 
     #[test]
@@ -150,12 +156,11 @@ mod tests {
         let payload = hex::decode(test_utils::giant_payload()).unwrap();
 
         let packet = [ip_bytes, tcp_bytes, payload.clone()].concat();
-        let result = unpack(&packet);
+        let result = unwrap(&packet);
         assert!(result.is_err());
 
         let err = result.unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Other);
-        assert_eq!(err.into_inner().unwrap().to_string(), "Bad TCP checksum")
+        assert_eq!(err, HeaderError::BadChecksum("TCP".to_string()));
     }
 
     // Difficult as fuck
@@ -181,20 +186,20 @@ mod tests {
         let tcph = TCPHeader {
             src_port: 80,
             dst_port: 47652,
-            seq_num: 3280096596,
-            ack_num: 1563085193,
+            seq_no: Wrap32::new(3280096596),
+            ack_no: Wrap32::new(1563085193),
             data_offset: 8,
             reserved: 0,
             flags: TCPFlags::ACK | TCPFlags::PSH,
             window: 235,
             checksum: 47864,
             urgent: 0,
-            options: Box::from(hex::decode("0101080afdc076540198f657").unwrap()),
-            payload: Box::from(payload),
+            options: hex::decode("0101080afdc076540198f657").unwrap(),
+            payload,
         };
 
-        let packet = pack(&iph, &tcph);
-        let result = unpack(&packet);
+        let packet = wrap(&iph, &tcph).unwrap();
+        let result = unwrap(&packet);
         assert!(result.is_ok());
 
         let (iph2, tcph2) = result.unwrap();

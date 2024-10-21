@@ -19,7 +19,7 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
-    use crate::tcp::flags::TCPFlags;
+    use crate::tcp::tcp_flags::TCPFlags;
 
     #[test]
     fn test_tcp_flags() {

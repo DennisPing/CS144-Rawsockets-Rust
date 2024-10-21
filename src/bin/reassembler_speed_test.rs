@@ -31,7 +31,7 @@ fn speed_test(num_chunks: usize, capacity: usize, random_seed: usize) -> io::Res
     // Set up Reassembler and output buffer
     let mut ra = Reassembler::new(ByteStream::new(capacity));
     let mut output_buffer = Vec::with_capacity(data.len());
-    let mut buf = [0u8; 8192]; // Reusable buffer
+    let mut buf = [0u8; 4096]; // Reusable buffer
 
     // Start timer
     let t0 = Instant::now();
@@ -94,5 +94,5 @@ fn main() {
     }
 
     // Result:
-    // Reassembler to ByteStream with capacity=1500 reached 12.04 Gbit/s
+    // Reassembler to ByteStream with capacity=1500 reached 13.20 Gbit/s
 }

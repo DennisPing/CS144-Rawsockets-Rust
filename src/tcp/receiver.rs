@@ -1,73 +1,33 @@
-use crate::tcp::flags::TCPFlags;
-use crate::tcp::header::TCPHeader;
+use crate::tcp::tcp_flags::TCPFlags;
+use crate::tcp::tcp_header::TCPHeader;
 use crate::tcp::reassembler::Reassembler;
 use std::io;
-use std::io::{Error, ErrorKind, Read, Write};
 use crate::tcp::wrap32::Wrap32;
 
+/// The receiver end of the `TcpConnection`
 #[derive(Debug)]
-pub struct TCPReceiver {
-    syn: bool,
-    fin: bool,
+pub struct TcpReceiver {
+    isn: Wrap32,                // Initial seq number
     reassembler: Reassembler,   // Handles TCP segments
-    isn: Option<Wrap32>, // Initial seq number
 }
 
-impl TCPReceiver {
-    pub fn new(reassembler: Reassembler) -> Self {
-        TCPReceiver {
-            syn: false,
-            fin: false,
+impl TcpReceiver {
+    pub fn new(isn: Wrap32, reassembler: Reassembler) -> Self {
+        TcpReceiver {
+            isn,
             reassembler,
-            isn: None,
         }
     }
 
-    /*
-    TCP receiver tells the other end:
-        - ack no
-        - window size
-        - rst flag
-    */
-
-    pub fn recv(&mut self, tcph: TCPHeader) -> io::Result<usize> {
-        // self.reassembler.insert(1, &tcph.payload, false)?;
-        Ok(tcph.payload.len())
+    pub fn recv(&mut self, tcph: TCPHeader) -> io::Result<()> {
+        let checkpoint = self.reassembler.next_byte_idx() as u64;
+        let abs_seq_no = tcph.seq_no.unwrap(self.isn, checkpoint);
+        
+        let is_last = tcph.flags.contains(TCPFlags::FIN);
+        self.reassembler.insert(abs_seq_no as usize, &tcph.payload, is_last)
     }
-
-    pub fn send(&mut self) -> TCPHeader {
-        TCPHeader {
-            src_port: 0,
-            dst_port: 0,
-            seq_num: 0,
-            ack_num: 0,
-            data_offset: 0,
-            reserved: 0,
-            flags: TCPFlags::SYN,
-            window: 0,
-            checksum: 0,
-            urgent: 0,
-            options: Box::from([]),
-            payload: Box::from([]),
-        }
-    }
-}
-
-impl Read for TCPReceiver {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.reassembler.read(buf)
-    }
-}
-
-impl Write for TCPReceiver {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if self.reassembler.get_output().is_closed() {
-            return Err(Error::new(ErrorKind::Other, "stream closed"));
-        }
-        todo!()
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        todo!()
+    
+    pub fn next_expected_seq_no(&self) -> u64 {
+        self.reassembler.next_byte_idx() as u64
     }
 }

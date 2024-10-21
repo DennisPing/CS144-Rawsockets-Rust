@@ -1,9 +1,12 @@
 pub mod tcp_over_ip;
+pub mod errors;
 
 // -- Re-export public structs --
 
-pub use crate::packet::tcp_over_ip::pack;
-pub use crate::packet::tcp_over_ip::unpack;
+pub use crate::packet::tcp_over_ip::wrap_into;
+pub use crate::packet::tcp_over_ip::unwrap_from;
+pub use crate::packet::tcp_over_ip::wrap;
+pub use crate::packet::tcp_over_ip::unwrap;
 
 // -- Unit test helpers --
 

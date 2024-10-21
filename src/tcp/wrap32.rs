@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::ops::Add;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,6 +12,11 @@ impl Wrap32 {
 
     pub fn new(value: u32) -> Self {
         Wrap32 { value }
+    }
+
+    /// Get the raw `u32` value
+    pub fn value(&self) -> u32 {
+        self.value
     }
 
     /// Wrap an absolute `seq_no` given an `initial seq_no`
@@ -38,6 +44,18 @@ impl Add for Wrap32 {
 
     fn add(self, other: Wrap32) -> Wrap32 {
         Wrap32::new(self.value.wrapping_add(other.value))
+    }
+}
+
+impl PartialOrd for Wrap32 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        // Need to handle the wraparound case
+        let diff = self.value.wrapping_sub(other.value);
+        if diff < Wrap32::HALF_WRAP as u32 {
+            Some(Ordering::Greater)
+        } else {
+            Some(Ordering::Less)
+        }
     }
 }
 

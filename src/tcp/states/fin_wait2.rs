@@ -1,0 +1,1 @@
+pub struct FinWait2;

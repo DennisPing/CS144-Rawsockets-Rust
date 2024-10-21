@@ -1,2 +1,2 @@
-pub mod flags;
-pub mod header;
+pub mod ip_flags;
+pub mod ip_header;
