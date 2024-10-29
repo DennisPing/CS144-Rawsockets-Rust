@@ -3,7 +3,7 @@ use bitflags::bitflags;
 bitflags! {
     // Bit positions [ CWR, ECE, URG, ACK, PSH, RST, SYN, FIN ]
     #[derive(Debug, Clone, Copy, PartialEq)]
-    pub struct TCPFlags: u8 {
+    pub struct TcpFlags: u8 {
         const CWR = 1 << 7;
         const ECE = 1 << 6;
         const URG = 1 << 5;
@@ -19,27 +19,27 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
-    use crate::tcp::tcp_flags::TCPFlags;
+    use crate::tcp::tcp_flags::TcpFlags;
 
     #[test]
     fn test_tcp_flags() {
-        assert_eq!(TCPFlags::FIN.bits(), 0b00000001);
-        assert_eq!(TCPFlags::SYN.bits(), 0b00000010);
-        assert_eq!(TCPFlags::RST.bits(), 0b00000100);
-        assert_eq!(TCPFlags::PSH.bits(), 0b00001000);
-        assert_eq!(TCPFlags::ACK.bits(), 0b00010000);
-        assert_eq!(TCPFlags::URG.bits(), 0b00100000);
-        assert_eq!(TCPFlags::ECE.bits(), 0b01000000);
-        assert_eq!(TCPFlags::CWR.bits(), 0b10000000);
+        assert_eq!(TcpFlags::FIN.bits(), 0b00000001);
+        assert_eq!(TcpFlags::SYN.bits(), 0b00000010);
+        assert_eq!(TcpFlags::RST.bits(), 0b00000100);
+        assert_eq!(TcpFlags::PSH.bits(), 0b00001000);
+        assert_eq!(TcpFlags::ACK.bits(), 0b00010000);
+        assert_eq!(TcpFlags::URG.bits(), 0b00100000);
+        assert_eq!(TcpFlags::ECE.bits(), 0b01000000);
+        assert_eq!(TcpFlags::CWR.bits(), 0b10000000);
 
-        let combined = TCPFlags::FIN
-            | TCPFlags::SYN
-            | TCPFlags::RST
-            | TCPFlags::PSH
-            | TCPFlags::ACK
-            | TCPFlags::URG
-            | TCPFlags::ECE
-            | TCPFlags::CWR;
+        let combined = TcpFlags::FIN
+            | TcpFlags::SYN
+            | TcpFlags::RST
+            | TcpFlags::PSH
+            | TcpFlags::ACK
+            | TcpFlags::URG
+            | TcpFlags::ECE
+            | TcpFlags::CWR;
         assert_eq!(combined.bits(), 0b11111111);
     }
 }

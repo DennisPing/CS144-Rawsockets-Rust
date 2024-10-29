@@ -1,5 +1,5 @@
-use crate::tcp::tcp_flags::TCPFlags;
-use crate::tcp::tcp_header::TCPHeader;
+use crate::tcp::tcp_flags::TcpFlags;
+use crate::tcp::tcp_header::TcpHeader;
 use crate::tcp::reassembler::Reassembler;
 use std::io;
 use crate::tcp::wrap32::Wrap32;
@@ -19,11 +19,11 @@ impl TcpReceiver {
         }
     }
 
-    pub fn recv(&mut self, tcph: TCPHeader) -> io::Result<()> {
+    pub fn recv(&mut self, tcph: TcpHeader) -> io::Result<()> {
         let checkpoint = self.reassembler.next_byte_idx() as u64;
         let abs_seq_no = tcph.seq_no.unwrap(self.isn, checkpoint);
         
-        let is_last = tcph.flags.contains(TCPFlags::FIN);
+        let is_last = tcph.flags.contains(TcpFlags::FIN);
         self.reassembler.insert(abs_seq_no as usize, &tcph.payload, is_last)
     }
     

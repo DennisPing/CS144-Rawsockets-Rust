@@ -1,15 +1,15 @@
-use crate::ip::ip_flags::IPFlags;
+use crate::ip::ip_flags::IpFlags;
 use std::net::Ipv4Addr;
 use crate::packet::errors::HeaderError;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct IPHeader {
+pub struct IpHeader {
     pub version: u8, // Always 4 for IPv4
     pub ihl: u8,     // Always 5 since we have no options
     pub tos: u8,     // Always 0 when we send out, can be 8 when receiving from server
     pub total_len: u16,
     pub id: u16,
-    pub flags: IPFlags,   // 3 bits, part of u16
+    pub flags: IpFlags,   // 3 bits, part of u16
     pub frag_offset: u16, // 13 bits, part of u16
     pub ttl: u8,          // Always 64 when we send out
     pub protocol: u8,     // Always 6 for TCP
@@ -18,7 +18,7 @@ pub struct IPHeader {
     pub dst_ip: Ipv4Addr,
 }
 
-impl IPHeader{
+impl IpHeader {
     /// Serialize an `IPHeader` into a byte array of size 20.
     pub fn serialize(&self, buf: &mut [u8]) -> Result<usize, HeaderError> {
         if buf.len() < 20 {
@@ -59,14 +59,14 @@ impl IPHeader{
         let total_len = u16::from_be_bytes([buf[2], buf[3]]);
         let id = u16::from_be_bytes([buf[4], buf[5]]);
         let combo_flags = u16::from_be_bytes([buf[6], buf[7]]);
-        let (flags, frag_offset) = IPFlags::unpack(combo_flags);
+        let (flags, frag_offset) = IpFlags::unpack(combo_flags);
         let ttl = buf[8];
         let protocol = buf[9];
         let checksum = u16::from_be_bytes([buf[10], buf[11]]);
         let src_ip = Ipv4Addr::new(buf[12], buf[13], buf[14], buf[15]);
         let dst_ip = Ipv4Addr::new(buf[16], buf[17], buf[18], buf[19]);
 
-        Ok(IPHeader {
+        Ok(IpHeader {
             version,
             ihl,
             tos,
@@ -97,15 +97,15 @@ impl IPHeader{
     }
 }
 
-impl Default for IPHeader {
+impl Default for IpHeader {
     fn default() -> Self {
-        IPHeader {
+        IpHeader {
             version: 0,
             ihl: 0,
             tos: 0,
             total_len: 0,
             id: 0,
-            flags: IPFlags::DF,
+            flags: IpFlags::DF,
             frag_offset: 0,
             ttl: 0,
             protocol: 0,
@@ -125,13 +125,13 @@ mod tests {
 
     #[test]
     fn test_ip_header_to_bytes() {
-        let header = IPHeader {
+        let header = IpHeader {
             version: 4,
             ihl: 5,
             tos: 0,
             total_len: 64,
             id: 0,
-            flags: IPFlags::DF,
+            flags: IpFlags::DF,
             frag_offset: 0,
             ttl: 64,
             protocol: 6,
@@ -144,7 +144,7 @@ mod tests {
         let n = header.serialize(&mut buf).unwrap();
 
         // Verify that checksum is 0
-        let checksum = IPHeader::checksum(&buf[..n]);
+        let checksum = IpHeader::checksum(&buf[..n]);
         assert_eq!(checksum, 0);
 
         let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
@@ -154,14 +154,14 @@ mod tests {
     #[test]
     fn test_ip_header_from_bytes() {
         let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
-        let iph = IPHeader::parse(&ip_bytes).unwrap();
+        let iph = IpHeader::parse(&ip_bytes).unwrap();
 
         assert_eq!(iph.version, 4);
         assert_eq!(iph.ihl, 5);
         assert_eq!(iph.tos, 0);
         assert_eq!(iph.total_len, 64);
         assert_eq!(iph.id, 0);
-        assert_eq!(iph.flags, IPFlags::DF);
+        assert_eq!(iph.flags, IpFlags::DF);
         assert_eq!(iph.frag_offset, 0);
         assert_eq!(iph.ttl, 64);
         assert_eq!(iph.protocol, 6);

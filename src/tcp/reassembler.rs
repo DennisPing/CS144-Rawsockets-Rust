@@ -24,7 +24,6 @@ impl Reassembler {
 
     /// Insert a new byte segment into the `Reassembler`
     pub fn insert(&mut self, first_idx: usize, data: &[u8], is_last: bool) -> io::Result<()> {
-        let data: Box<[u8]> = data.into();
         if data.is_empty() && !is_last {
             return Ok(());
         }
@@ -58,7 +57,7 @@ impl Reassembler {
         &self.output
     }
 
-    /// Get the index of the next byte
+    /// Get the index of the next byte. Aka: tail of the ByteStream
     pub fn next_byte_idx(&self) -> usize {
         self.next_byte_idx
     }

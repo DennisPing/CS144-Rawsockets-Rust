@@ -1,17 +1,17 @@
-use crate::ip::ip_header::IPHeader;
-use crate::tcp::tcp_flags::TCPFlags;
+use crate::ip::ip_header::IpHeader;
+use crate::tcp::tcp_flags::TcpFlags;
 use crate::packet::errors::HeaderError;
 use crate::tcp::wrap32::Wrap32;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TCPHeader {
+pub struct TcpHeader {
     pub src_port: u16,
     pub dst_port: u16,
     pub seq_no: Wrap32,
     pub ack_no: Wrap32,
     pub data_offset: u8, // Upper 4 bits
     pub reserved: u8,    // Lower 4 bits
-    pub flags: TCPFlags,
+    pub flags: TcpFlags,
     pub window: u16,
     pub checksum: u16,
     pub urgent: u16,
@@ -19,9 +19,9 @@ pub struct TCPHeader {
     pub payload: Vec<u8>, // Append payload to end of TCP header for ease of use
 }
 
-impl TCPHeader {
+impl TcpHeader {
     /// Convert a `TCPHeader` into a byte vector.
-    pub fn serialize(&self, buf: &mut [u8], iph: &IPHeader) -> Result<usize, HeaderError> {
+    pub fn serialize(&self, buf: &mut [u8], iph: &IpHeader) -> Result<usize, HeaderError> {
         let header_len = self.data_offset as usize * 4; // 20 + options
         let total_len = header_len + self.payload.len(); // 20 + options + payload
 
@@ -54,7 +54,7 @@ impl TCPHeader {
     }
 
     /// Convert a byte vector into a `TCPHeader`.
-    pub fn parse(buf: &[u8], iph: &IPHeader) -> Result<Self, HeaderError> {
+    pub fn parse(buf: &[u8], iph: &IpHeader) -> Result<Self, HeaderError> {
         if buf.len() < 20 {
             return Err(HeaderError::BufferTooSmall { expected: 20, found: buf.len() })
         }
@@ -65,7 +65,7 @@ impl TCPHeader {
         let ack_no = u32::from_be_bytes([buf[8], buf[9], buf[10], buf[11]]);
         let data_offset = buf[12] >> 4;
         let reserved = buf[12] & 0x0f;
-        let flags = TCPFlags::from_bits_truncate(buf[13]);
+        let flags = TcpFlags::from_bits_truncate(buf[13]);
         let window = u16::from_be_bytes([buf[14], buf[15]]);
         let checksum = u16::from_be_bytes([buf[16], buf[17]]);
         let urgent = u16::from_be_bytes([buf[18], buf[19]]);
@@ -91,7 +91,7 @@ impl TCPHeader {
             return Err(HeaderError::BadChecksum("TCP".to_string()))
         }
 
-        Ok(TCPHeader {
+        Ok(TcpHeader {
             src_port,
             dst_port,
             seq_no: Wrap32::new(seq_no),
@@ -108,7 +108,7 @@ impl TCPHeader {
     }
 
     /// Compute the checksum for a `TCPHeader`.
-    pub fn checksum(data: &[u8], iph: &IPHeader) -> u16 {
+    pub fn checksum(data: &[u8], iph: &IpHeader) -> u16 {
         let mut sum: u32 = 0;
 
         // Pseudo-header
@@ -141,16 +141,16 @@ impl TCPHeader {
     }
 }
 
-impl Default for TCPHeader {
+impl Default for TcpHeader {
     fn default() -> Self {
-        TCPHeader {
+        TcpHeader {
             src_port: 0,
             dst_port: 0,
             seq_no: Wrap32::new(0),
             ack_no: Wrap32::new(0),
             data_offset: 0,
             reserved: 0,
-            flags: TCPFlags::ACK,
+            flags: TcpFlags::ACK,
             window: 0,
             checksum: 0,
             urgent: 0,
@@ -169,14 +169,14 @@ mod tests {
 
     #[test]
     fn test_tcp_header_to_bytes() {
-        let tcp_header = TCPHeader {
+        let tcp_header = TcpHeader {
             src_port: 50871,
             dst_port: 80,
             seq_no: Wrap32::new(2753993875),
             ack_no: Wrap32::new(0),
             data_offset: 11,
             reserved: 0,
-            flags: TCPFlags::SYN,
+            flags: TcpFlags::SYN,
             window: 65535,
             checksum: 37527,
             urgent: 0,
@@ -186,12 +186,12 @@ mod tests {
 
         // Get the IP header in order to build TCP header
         let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
-        let iph = IPHeader::parse(&ip_bytes).unwrap();
+        let iph = IpHeader::parse(&ip_bytes).unwrap();
         let mut buf = vec![0u8; 1024];
         let n = tcp_header.serialize(&mut buf, &iph).unwrap();
 
         // Verify that checksum is 0
-        let checksum = TCPHeader::checksum(&buf[..n], &iph);
+        let checksum = TcpHeader::checksum(&buf[..n], &iph);
         assert_eq!(checksum, 0);
 
         // Check that constructed data is equal to wireshark data
@@ -202,10 +202,10 @@ mod tests {
     #[test]
     fn test_tcp_header_from_bytes() {
         let ip_bytes = hex::decode(test_utils::get_ip_hex()).unwrap();
-        let iph = IPHeader::parse(&ip_bytes).unwrap();
+        let iph = IpHeader::parse(&ip_bytes).unwrap();
 
         let tcp_bytes = hex::decode(test_utils::get_tcp_hex()).unwrap();
-        let tcph = TCPHeader::parse(&tcp_bytes, &iph).unwrap();
+        let tcph = TcpHeader::parse(&tcp_bytes, &iph).unwrap();
 
         assert_eq!(tcph.src_port, 50871);
         assert_eq!(tcph.dst_port, 80);
@@ -213,7 +213,7 @@ mod tests {
         assert_eq!(tcph.ack_no, Wrap32::new(0));
         assert_eq!(tcph.data_offset, 11);
         assert_eq!(tcph.reserved, 0);
-        assert_eq!(tcph.flags, TCPFlags::SYN);
+        assert_eq!(tcph.flags, TcpFlags::SYN);
         assert_eq!(tcph.window, 65535);
         assert_eq!(tcph.checksum, 37527);
         assert_eq!(tcph.urgent, 0);
