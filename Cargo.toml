@@ -9,7 +9,7 @@ hex = "0.4.3"
 network-interface = "2.0.0"
 nix = { version = "0.29.0", features = ["socket"] }
 rand = "0.8.5"
-thiserror = "1.0.64"
+thiserror = "2.0.11"
 
 [dev-dependencies]
 rayon = "1.10.0"

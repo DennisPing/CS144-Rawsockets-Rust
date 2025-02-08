@@ -1,7 +1,8 @@
 use std::cmp::Ordering;
-use std::ops::Add;
+use std::fmt::Display;
+use std::ops::{Add, AddAssign};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
 pub struct Wrap32 {
     value: u32,
 }
@@ -45,15 +46,29 @@ impl Add for Wrap32 {
     }
 }
 
+impl AddAssign for Wrap32 {
+    fn add_assign(&mut self, rhs: Self) {
+        self.value = self.value.wrapping_add(rhs.value);
+    }
+}
+
 impl PartialOrd for Wrap32 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // Need to handle the wraparound case
+        if self.value == other.value {
+            return Some(Ordering::Equal);
+        }
         let diff = self.value.wrapping_sub(other.value);
         if diff < Wrap32::HALF_WRAP as u32 {
             Some(Ordering::Greater)
         } else {
             Some(Ordering::Less)
         }
+    }
+}
+
+impl Display for Wrap32 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 

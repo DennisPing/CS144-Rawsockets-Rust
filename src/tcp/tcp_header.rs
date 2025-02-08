@@ -26,7 +26,7 @@ impl TcpHeader {
         let total_len = header_len + self.payload.len(); // 20 + options + payload
 
         if buf.len() < total_len {
-            return Err(HeaderError::BufferTooSmall { expected: total_len, found: buf.len() })
+            return Err(HeaderError::InvalidBuffer { expected: total_len, actual: buf.len() })
         }
 
         buf[0..2].copy_from_slice(&self.src_port.to_be_bytes());
@@ -56,7 +56,7 @@ impl TcpHeader {
     /// Convert a byte vector into a `TCPHeader`.
     pub fn parse(buf: &[u8], iph: &IpHeader) -> Result<Self, HeaderError> {
         if buf.len() < 20 {
-            return Err(HeaderError::BufferTooSmall { expected: 20, found: buf.len() })
+            return Err(HeaderError::InvalidBuffer { expected: 20, actual: buf.len() })
         }
 
         let src_port = u16::from_be_bytes([buf[0], buf[1]]);
@@ -72,7 +72,7 @@ impl TcpHeader {
 
         let header_len = data_offset as usize * 4;
         if buf.len() < header_len {
-            return Err(HeaderError::BufferTooSmall { expected: header_len, found: buf.len() })
+            return Err(HeaderError::InvalidBuffer { expected: header_len, actual: buf.len() })
         }
 
         let options = if header_len > 20 {

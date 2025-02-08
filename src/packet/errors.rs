@@ -1,10 +1,9 @@
-use std::io;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Error)]
 pub enum HeaderError {
-    #[error("Buffer too small: expected at least {expected} bytes, actual {found} bytes")]
-    BufferTooSmall {expected: usize, found: usize},
+    #[error("Invalid buffer: expected {expected} bytes, actual {actual} bytes")]
+    InvalidBuffer {expected: usize, actual: usize},
 
     #[error("Bad checksum")]
     BadChecksum(String),

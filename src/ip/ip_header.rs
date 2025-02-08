@@ -22,7 +22,7 @@ impl IpHeader {
     /// Serialize an `IPHeader` into a byte array of size 20.
     pub fn serialize(&self, buf: &mut [u8]) -> Result<usize, HeaderError> {
         if buf.len() < 20 {
-            return Err(HeaderError::BufferTooSmall { expected: 20, found: buf.len() })
+            return Err(HeaderError::InvalidBuffer { expected: 20, actual: buf.len() })
         }
 
         buf[0] = (self.version << 4) | self.ihl;
@@ -46,7 +46,7 @@ impl IpHeader {
     /// Parse a byte array into an `IPHeader`.
     pub fn parse(buf: &[u8]) -> Result<Self, HeaderError> {
         if buf.len() < 20 {
-            return Err(HeaderError::BufferTooSmall { expected: 20, found: buf.len() })
+            return Err(HeaderError::InvalidBuffer { expected: 20, actual: buf.len() })
         }
 
         if Self::checksum(&buf[0..20]) != 0 {
