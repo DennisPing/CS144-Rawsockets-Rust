@@ -1,34 +1,6 @@
 use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
 use std::io::{Error, ErrorKind};
-use std::marker::PhantomData;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
-use crate::ip::ip_header::IpHeader;
-use crate::tcp::errors::TcpError;
-use crate::tcp::receiver::TcpReceiver;
-use crate::tcp::sender::TcpSender;
-use crate::tcp::tcp_header::TcpHeader;
-
-#[derive(Debug)]
-pub struct TcpConn<S> {
-    pub(crate) sender: TcpSender,
-    pub(crate) receiver: TcpReceiver,
-    pub(crate) state: PhantomData<S>,
-}
-
-impl<S> TcpConn<S> {
-    fn handle_incoming_segment(&mut self, tcph: TcpHeader, iph: IpHeader) -> Result<(), TcpError> {
-        if let Some(data) = self.receiver.receive_segment(tcph, iph)? {
-            // Notify the application layer about the received data
-            // Push data into a queue or invoke a callback
-        }
-
-        // Generate an ACK based on the receiver's state
-        let (ack_no, window_size) = self.receiver.generate_ack();
-        self.sender.update_ack(ack_no, window_size)?;
-
-        Ok(())
-    }
-}
 
 /// Resolve hostname to an IPv4 address.
 fn resolve_hostname(hostname: &str) -> Result<SocketAddrV4, Error> {

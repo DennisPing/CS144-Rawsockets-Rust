@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Wrap32 {
     value: u32,
 }
@@ -200,14 +200,14 @@ mod tests {
     // -- Test compare --
 
     #[test]
-
     fn test_equality() {
         let wrap_a = Wrap32::new(3);
         let wrap_b = Wrap32::new(1);
+        let wrap_c = Wrap32::new(1);
 
         assert_ne!(wrap_a, wrap_b);
-        assert_eq!(wrap_a != wrap_b, true);
-        assert_eq!(wrap_a == wrap_b, false);
+        assert_ne!(wrap_a, wrap_b);
+        assert_eq!(wrap_b, wrap_c);
     }
 
     #[test]

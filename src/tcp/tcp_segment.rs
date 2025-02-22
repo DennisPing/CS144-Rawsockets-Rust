@@ -10,9 +10,8 @@ use crate::tcp::wrap32::Wrap32;
 /// A builder for creating TCP messages. Single threaded only.
 #[derive(Debug)]
 pub struct TcpSegment {
-    iph: IpHeader,   // IP header template
-    tcph: TcpHeader, // TCP header template
-    buffer: Vec<u8>, // Reusable buffer
+    pub iph: IpHeader,   // IP header template
+    pub tcph: TcpHeader, // TCP header template
 }
 
 impl TcpSegment {
@@ -20,7 +19,6 @@ impl TcpSegment {
          let mut builder = TcpSegment {
             iph: Default::default(),
             tcph: Default::default(),
-            buffer: vec![0u8; 2048],
         };
 
          // Set the fixed fields of the IP header
@@ -37,13 +35,11 @@ impl TcpSegment {
         builder
     }
 
-    pub fn build(&mut self) -> Result<&[u8], HeaderError> {
+    pub fn build(&mut self) -> Result<Vec<u8>, HeaderError> {
         self.tcph.data_offset = 5 + (self.tcph.options.len() as u8) / 4;
         let total_len = 20 + (self.tcph.data_offset as usize) * 4 + self.tcph.payload.len();
         self.iph.total_len = total_len as u16;
-
-        packet::wrap_into(&self.iph, &self.tcph, &mut self.buffer)?;
-        Ok(&self.buffer[0..total_len])
+        packet::wrap(&self.iph, &self.tcph)
     }
 
     pub fn ttl(&mut self, ttl: u8) -> &mut Self {
@@ -131,7 +127,7 @@ mod tests {
         assert_eq!(tcph.payload.len(), 0);
 
         // Check that the unwrapped packet is the same as the original
-        let result = packet::unwrap(packet);
+        let result = packet::unwrap(packet.as_ref());
         assert!(result.is_ok());
         let (iph2, tcph2) = result.unwrap();
         assert_eq!(iph, iph2);
@@ -175,7 +171,7 @@ mod tests {
         assert_eq!(tcph.payload, vec![5, 6, 7, 8]);
 
         // Check that the unwrapped packet is the same as the original
-        let result = packet::unwrap(packet);
+        let result = packet::unwrap(packet.as_ref());
         assert!(result.is_ok());
         let (iph2, tcph2) = result.unwrap();
         assert_eq!(iph, iph2);

@@ -24,7 +24,7 @@ impl ByteStream {
     }
 
     /// Remove `N` bytes from the byte stream and return the actual number of bytes popped
-    pub fn pop_output(&mut self, len: usize) -> usize {
+    pub fn pop(&mut self, len: usize) -> usize {
         let to_pop = len.min(self.buffer.len());
         self.buffer.drain(..to_pop);
         self.bytes_read += to_pop;
@@ -32,7 +32,7 @@ impl ByteStream {
     }
 
     /// Peek `N` bytes without consuming them and return a new vector of bytes peeked
-    pub fn peek_output(&self, amount: usize) -> Vec<u8> {
+    pub fn peek(&self, amount: usize) -> Vec<u8> {
         let to_peek = amount.min(self.buffer.len());
         self.buffer.iter().take(to_peek).cloned().collect()
     }
@@ -221,12 +221,12 @@ mod tests {
         bs.write_all(data).unwrap();
         assert_eq!(bs.buffer_size(), data.len());
 
-        let n_popped = bs.pop_output(5);
+        let n_popped = bs.pop(5);
         assert_eq!(n_popped, 5);
         assert_eq!(bs.bytes_read(), 5);
         assert_eq!(bs.buffer_size(), 6);
 
-        let n_popped = bs.pop_output(99); // Request more than available
+        let n_popped = bs.pop(99); // Request more than available
         assert_eq!(n_popped, 6);
         assert_eq!(bs.bytes_read(), 11);
         assert!(bs.is_buffer_empty());
@@ -239,10 +239,10 @@ mod tests {
         bs.write_all(data).unwrap();
         assert_eq!(bs.buffer_size(), data.len());
 
-        let peeked = bs.peek_output(5);
+        let peeked = bs.peek(5);
         assert_eq!(peeked, b"hello");
 
-        let peeked = bs.peek_output(15); // Peek more than available
+        let peeked = bs.peek(15); // Peek more than available
         assert_eq!(peeked, b"hello world");
     }
 

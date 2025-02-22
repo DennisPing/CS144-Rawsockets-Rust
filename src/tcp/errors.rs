@@ -26,8 +26,8 @@ pub enum TcpError {
     #[error("Resource temporarily unavailable")]
     ResourceUnavailable, // EAGAIN
 
-    #[error("Invalid argument: {arg}")]
-    InvalidArgument { arg: String }, // EINVAL
+    #[error("Invalid state")]
+    InvalidState(String), // EINVAL
 
     #[error("Invalid memory or resources")]
     InvalidBuffer, // ENOBUFS
@@ -55,4 +55,7 @@ pub enum TcpError {
 
     #[error("Address not available")]
     AddressNotAvailable, // EADDRNOTAVAIL
+
+    #[error("Operation would block")]
+    WouldBlock, // EWOULDBLOCK
 }
