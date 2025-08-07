@@ -1,5 +1,5 @@
-use net::tcp::byte_stream::ByteStream;
-use net::tcp::reassembler::Reassembler;
+use net::socket::byte_stream::ByteStream;
+use net::socket::reassembler::Reassembler;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;

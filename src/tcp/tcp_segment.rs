@@ -2,7 +2,7 @@ use std::net::Ipv4Addr;
 use crate::ip::ip_flags::IpFlags;
 use crate::ip::ip_header::IpHeader;
 use crate::packet;
-use crate::packet::errors::HeaderError;
+use crate::packet::packet_error::PacketError;
 use crate::tcp::tcp_flags::TcpFlags;
 use crate::tcp::tcp_header::TcpHeader;
 use crate::tcp::wrap32::Wrap32;
@@ -35,7 +35,7 @@ impl TcpSegment {
         builder
     }
 
-    pub fn build(&mut self) -> Result<Vec<u8>, HeaderError> {
+    pub fn build(&mut self) -> Result<Vec<u8>, PacketError> {
         self.tcph.data_offset = 5 + (self.tcph.options.len() as u8) / 4;
         let total_len = 20 + (self.tcph.data_offset as usize) * 4 + self.tcph.payload.len();
         self.iph.total_len = total_len as u16;

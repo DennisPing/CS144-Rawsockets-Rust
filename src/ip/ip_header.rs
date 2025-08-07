@@ -1,6 +1,7 @@
 use crate::ip::ip_flags::IpFlags;
 use std::net::Ipv4Addr;
-use crate::packet::errors::HeaderError;
+use nix::libc::IPPROTO_TCP;
+use crate::ip::ip_error::IpError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IpHeader {
@@ -20,10 +21,9 @@ pub struct IpHeader {
 
 impl IpHeader {
     /// Serialize an `IPHeader` into a byte array of size 20.
-    pub fn serialize(&self, buf: &mut [u8]) -> Result<usize, HeaderError> {
-        if buf.len() < 20 {
-            return Err(HeaderError::InvalidBuffer { expected: 20, actual: buf.len() })
-        }
+    pub fn serialize(&self, buf: &mut [u8]) -> usize {
+        // Sanity check
+        assert!(buf.len() >= 20, "Buffer too small for IP Header");
 
         buf[0] = (self.version << 4) | self.ihl;
         buf[1] = self.tos;
@@ -40,20 +40,24 @@ impl IpHeader {
         let checksum = Self::checksum(&buf[0..20]);
         buf[10..12].copy_from_slice(&checksum.to_be_bytes());
 
-        Ok(20)
+        20
     }
 
     /// Parse a byte array into an `IPHeader`.
-    pub fn parse(buf: &[u8]) -> Result<Self, HeaderError> {
-        if buf.len() < 20 {
-            return Err(HeaderError::InvalidBuffer { expected: 20, actual: buf.len() })
-        }
+    pub fn parse(buf: &[u8]) -> Result<Self, IpError> {
+        // Sanity check
+        assert!(buf.len() >= 20, "Buffer too small for IP Header");
 
-        if Self::checksum(&buf[0..20]) != 0 {
-            return Err(HeaderError::BadChecksum("IP".to_string()))
+        let checksum = Self::checksum(&buf[0..20]);
+        if checksum != 0 {
+            return Err(IpError::BadChecksum)
         };
 
         let version = buf[0] >> 4;
+        if version != 4 {
+            return Err(IpError::VersionNotSupported(version))
+        }
+
         let ihl = buf[0] & 0x0f;
         let tos = buf[1];
         let total_len = u16::from_be_bytes([buf[2], buf[3]]);
@@ -61,6 +65,10 @@ impl IpHeader {
         let combo_flags = u16::from_be_bytes([buf[6], buf[7]]);
         let (flags, frag_offset) = IpFlags::unpack(combo_flags);
         let ttl = buf[8];
+        if ttl == 0 {
+            return Err(IpError::TtlExceeded)
+        }
+
         let protocol = buf[9];
         let checksum = u16::from_be_bytes([buf[10], buf[11]]);
         let src_ip = Ipv4Addr::new(buf[12], buf[13], buf[14], buf[15]);
@@ -100,15 +108,15 @@ impl IpHeader {
 impl Default for IpHeader {
     fn default() -> Self {
         IpHeader {
-            version: 0,
-            ihl: 0,
+            version: 4,
+            ihl: 5,
             tos: 0,
-            total_len: 0,
+            total_len: 20, // Minimum size with no payload
             id: 0,
             flags: IpFlags::DF,
             frag_offset: 0,
-            ttl: 0,
-            protocol: 0,
+            ttl: 64,
+            protocol: IPPROTO_TCP as u8,
             checksum: 0,
             src_ip: Ipv4Addr::new(0,0,0,0),
             dst_ip: Ipv4Addr::new(0,0,0,0),
@@ -134,14 +142,14 @@ mod tests {
             flags: IpFlags::DF,
             frag_offset: 0,
             ttl: 64,
-            protocol: 6,
+            protocol: IPPROTO_TCP as u8,
             checksum: 54134,
             src_ip: Ipv4Addr::new(10, 110, 208, 106),
             dst_ip: Ipv4Addr::new(204, 44, 192, 60),
         };
 
         let mut buf = vec![0u8; 64];
-        let n = header.serialize(&mut buf).unwrap();
+        let n = header.serialize(&mut buf);
 
         // Verify that checksum is 0
         let checksum = IpHeader::checksum(&buf[..n]);
@@ -164,7 +172,7 @@ mod tests {
         assert_eq!(iph.flags, IpFlags::DF);
         assert_eq!(iph.frag_offset, 0);
         assert_eq!(iph.ttl, 64);
-        assert_eq!(iph.protocol, 6);
+        assert_eq!(iph.protocol, IPPROTO_TCP as u8);
         assert_eq!(iph.checksum, 54134);
         assert_eq!(iph.src_ip, Ipv4Addr::new(10, 110, 208, 106));
         assert_eq!(iph.dst_ip, Ipv4Addr::new(204, 44, 192, 60));

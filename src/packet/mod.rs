@@ -1,5 +1,5 @@
 pub mod tcp_over_ip;
-pub mod errors;
+pub(crate) mod packet_error;
 
 // -- Re-export public structs --
 

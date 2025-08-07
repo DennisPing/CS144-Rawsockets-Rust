@@ -1,4 +1,4 @@
-use net::tcp::byte_stream::ByteStream;
+use net::socket::byte_stream::ByteStream;
 use rand::prelude::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;

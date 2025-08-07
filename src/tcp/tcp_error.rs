@@ -1,33 +1,22 @@
-use std::io;
-use thiserror::Error;
-use crate::packet::errors::HeaderError;
 use crate::tcp::wrap32::Wrap32;
+use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum TcpError {
-    #[error("IO error: {0}")]
-    Io(#[from] io::Error), // Wrapper around std::io::Error
-    
-    #[error("Header error: {0}")]
-    HeaderError(#[from] HeaderError), // Wrapper around HeaderError
+    #[error("Bad checksum")]
+    BadChecksum,
 
     #[error("Invalid SEQ number: {expected} != {got}")]
-    InvalidSeqNumber {
-        expected: Wrap32,
-        got: Wrap32,
-    },
+    InvalidSeqNumber { expected: Wrap32, got: Wrap32 },
 
     #[error("Invalid ACK number: {expected} != {got}")]
-    InvalidAckNumber {
-        expected: Wrap32,
-        got: Wrap32,
-    },
+    InvalidAckNumber { expected: Wrap32, got: Wrap32 },
 
     #[error("Resource temporarily unavailable")]
     ResourceUnavailable, // EAGAIN
 
     #[error("Invalid state")]
-    InvalidState(String), // EINVAL
+    InvalidState(&'static str), // EINVAL
 
     #[error("Invalid memory or resources")]
     InvalidBuffer, // ENOBUFS

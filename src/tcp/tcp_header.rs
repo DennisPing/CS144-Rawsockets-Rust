@@ -1,6 +1,6 @@
 use crate::ip::ip_header::IpHeader;
 use crate::tcp::tcp_flags::TcpFlags;
-use crate::packet::errors::HeaderError;
+use crate::tcp::tcp_error::TcpError;
 use crate::tcp::wrap32::Wrap32;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,12 +21,12 @@ pub struct TcpHeader {
 
 impl TcpHeader {
     /// Convert a `TCPHeader` into a byte vector.
-    pub fn serialize(&self, buf: &mut [u8], iph: &IpHeader) -> Result<usize, HeaderError> {
+    pub fn serialize(&self, buf: &mut [u8], iph: &IpHeader) -> Result<usize, TcpError> {
         let header_len = self.data_offset as usize * 4; // 20 + options
         let total_len = header_len + self.payload.len(); // 20 + options + payload
 
         if buf.len() < total_len {
-            return Err(HeaderError::InvalidBuffer { expected: total_len, actual: buf.len() })
+            return Err(TcpError::InvalidBuffer)
         }
 
         buf[0..2].copy_from_slice(&self.src_port.to_be_bytes());
@@ -54,9 +54,9 @@ impl TcpHeader {
     }
 
     /// Convert a byte vector into a `TCPHeader`.
-    pub fn parse(buf: &[u8], iph: &IpHeader) -> Result<Self, HeaderError> {
+    pub fn parse(buf: &[u8], iph: &IpHeader) -> Result<Self, TcpError> {
         if buf.len() < 20 {
-            return Err(HeaderError::InvalidBuffer { expected: 20, actual: buf.len() })
+            return Err(TcpError::InvalidBuffer)
         }
 
         let src_port = u16::from_be_bytes([buf[0], buf[1]]);
@@ -72,7 +72,7 @@ impl TcpHeader {
 
         let header_len = data_offset as usize * 4;
         if buf.len() < header_len {
-            return Err(HeaderError::InvalidBuffer { expected: header_len, actual: buf.len() })
+            return Err(TcpError::InvalidBuffer)
         }
 
         let options = if header_len > 20 {
@@ -88,7 +88,7 @@ impl TcpHeader {
         };
 
         if Self::checksum(&buf[..(header_len + payload.len())], iph) != 0 {
-            return Err(HeaderError::BadChecksum("TCP".to_string()))
+            return Err(TcpError::BadChecksum)
         }
 
         Ok(TcpHeader {

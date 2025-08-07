@@ -1,13 +1,13 @@
-use std::io::Read;
+use crate::ip::ip_header::IpHeader;
+use crate::packet::packet_error::PacketError;
+use crate::socket::byte_stream::ByteStream;
+use crate::socket::reassembler::Reassembler;
 use crate::tcp::tcp_flags::TcpFlags;
 use crate::tcp::tcp_header::TcpHeader;
-use crate::tcp::reassembler::Reassembler;
-use crate::ip::ip_header::IpHeader;
-use crate::tcp::byte_stream::ByteStream;
-use crate::tcp::errors::TcpError;
 use crate::tcp::wrap32::Wrap32;
+use std::io::Read;
 
-/// The receiver end of the `TcpConnection`
+/// The receiver end of the `TcpSocket`
 #[derive(Debug)]
 pub struct TcpReceiver {
     isn: Wrap32,              // Ack number
@@ -24,15 +24,18 @@ impl TcpReceiver {
         }
     }
 
-    pub fn receive_segment(&mut self, tcph: TcpHeader, iph: IpHeader) -> Result<Option<Vec<u8>>, TcpError> {
+    pub fn receive_segment(
+        &mut self,
+        tcph: TcpHeader,
+        iph: IpHeader,
+    ) -> Result<Option<Vec<u8>>, PacketError> {
         // Handle initial SYN
         if tcph.flags.contains(TcpFlags::SYN) {
             self.reassembler.insert(0, &[], false)?;
-            
-            // Todo: Generate SYN-ACK
-            // This requires interaction with TcpSender, which may be handled at the TcpConn layer.
-            // Communicate with TcpConn to send a SYN-ACK.
-            
+            // !todo(Generate SYN-ACK)
+            // This requires interaction with TcpSender, which may be handled at the TcpSocket layer.
+            // Communicate with TcpSocket to send a SYN-ACK.
+
             return Ok(None);
         }
 
@@ -44,7 +47,8 @@ impl TcpReceiver {
             abs_seq_no += 1; // FIN consumes one sequence number
         }
 
-        self.reassembler.insert(abs_seq_no as usize, &tcph.payload, is_last)?;
+        self.reassembler
+            .insert(abs_seq_no as usize, &tcph.payload, is_last)?;
 
         // Update the new advertised window
         self.advertised_window = self.reassembler.get_output().remaining_capacity();

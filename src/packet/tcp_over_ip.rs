@@ -1,16 +1,16 @@
 use crate::ip::ip_header::IpHeader;
+use crate::packet::packet_error::PacketError;
 use crate::tcp::tcp_header::TcpHeader;
-use crate::packet::errors::HeaderError;
 
 /// Wrap an `IPHeader` and `TCPHeader` into a packet. Zero allocation.
-pub fn wrap_into(iph: &IpHeader, tcph: &TcpHeader, packet: &mut [u8]) -> Result<usize, HeaderError> {
-    let ip_len = iph.serialize(&mut packet[0..20])?;
+pub fn wrap_into(iph: &IpHeader, tcph: &TcpHeader, packet: &mut [u8]) -> Result<usize, PacketError> {
+    let ip_len = iph.serialize(&mut packet[0..20]);
     let tcp_length = tcph.serialize(&mut packet[20..], iph)?;
     Ok(ip_len + tcp_length)
 }
 
 /// Wrap an `IPHeader` and `TCPHeader` into a packet. Allocs a new `Vec<u8>` for convenience.
-pub fn wrap(iph: &IpHeader, tcph: &TcpHeader) -> Result<Vec<u8>, HeaderError> {
+pub fn wrap(iph: &IpHeader, tcph: &TcpHeader) -> Result<Vec<u8>, PacketError> {
     let tcp_len = tcph.data_offset as usize * 4 + tcph.payload.len();
     let total_len = 20 + tcp_len;
     let mut packet = vec![0u8; total_len];
@@ -20,7 +20,7 @@ pub fn wrap(iph: &IpHeader, tcph: &TcpHeader) -> Result<Vec<u8>, HeaderError> {
 }
 
 /// Unwrap a packet into `IPHeader` and `TCPHeader` objects. Zero allocation.
-pub fn unwrap_from(packet: &[u8], iph: &mut IpHeader, tcph: &mut TcpHeader) -> Result<usize, HeaderError> {
+pub fn unwrap_from(packet: &[u8], iph: &mut IpHeader, tcph: &mut TcpHeader) -> Result<usize, PacketError> {
     let parsed_iph = IpHeader::parse(&packet[0..20])?;
     let total_len = parsed_iph.total_len as usize;
     *iph = parsed_iph;
@@ -32,7 +32,7 @@ pub fn unwrap_from(packet: &[u8], iph: &mut IpHeader, tcph: &mut TcpHeader) -> R
 }
 
 /// Unpack a byte vector into an `IPHeader` and `TCPHeader`. Allocs new headers for convenience.
-pub fn unwrap(packet: &[u8]) -> Result<(IpHeader, TcpHeader), HeaderError> {
+pub fn unwrap(packet: &[u8]) -> Result<(IpHeader, TcpHeader), PacketError> {
     let mut iph = IpHeader::default();
     let mut tcph = TcpHeader::default();
 
@@ -49,6 +49,8 @@ mod tests {
     use crate::packet::test_utils;
     use crate::tcp::tcp_flags::TcpFlags;
     use std::net::Ipv4Addr;
+    use crate::ip::ip_error::IpError;
+    use crate::tcp::tcp_error::TcpError;
     use crate::tcp::wrap32::Wrap32;
 
     #[test]
@@ -145,7 +147,7 @@ mod tests {
         assert!(result.is_err());
 
         let err = result.unwrap_err();
-        assert_eq!(err, HeaderError::BadChecksum("IP".to_string()));
+        assert_eq!(err, PacketError::Ip(IpError::BadChecksum));
     }
 
     #[test]
@@ -160,7 +162,7 @@ mod tests {
         assert!(result.is_err());
 
         let err = result.unwrap_err();
-        assert_eq!(err, HeaderError::BadChecksum("TCP".to_string()));
+        assert_eq!(err, PacketError::Tcp(TcpError::BadChecksum));
     }
 
     // Difficult as fuck

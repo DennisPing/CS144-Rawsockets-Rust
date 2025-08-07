@@ -1,15 +1,16 @@
-use std::marker::PhantomData;
-use crate::tcp::errors::TcpError;
-use crate::tcp::socket::states::established::Established;
-use crate::tcp::socket::TcpSocket;
+use crate::packet::packet_error::PacketError;
+use crate::socket::socket::TcpSocket;
+use crate::socket::states::established::Established;
+use crate::tcp::tcp_error::TcpError;
 use crate::tcp::tcp_flags::TcpFlags;
 use crate::tcp::wrap32::Wrap32;
+use std::marker::PhantomData;
 
 pub struct SynRcvd;
 
 impl TcpSocket<SynRcvd> {
-    pub fn confirm(mut self) -> Result<TcpSocket<Established>, TcpError> {
-        if let Some(segment) = self.receiver.recv() {
+    pub fn confirm(mut self) -> Result<TcpSocket<Established>, PacketError> {
+        if let Some(segment) = self.recv_segment() {
             if segment.tcph.flags.contains(TcpFlags::ACK) {
                 // Validate the ACK number
                 if segment.tcph.ack_no == self.tcb.seq_no + Wrap32::new(1) {
@@ -19,7 +20,7 @@ impl TcpSocket<SynRcvd> {
                     self.tcb.window_size = segment.tcph.window;
 
                     // Send an ACK to confirm the connection
-                    self.send_ack()?;
+                    self.send_segment(TcpFlags::ACK, None)?;
 
                     // Cancel the timer
                     self.timer.cancel();
@@ -34,6 +35,6 @@ impl TcpSocket<SynRcvd> {
                 }
             }
         }
-        Err(TcpError::WouldBlock)
+        Err(PacketError::Tcp(TcpError::WouldBlock))
     }
 }

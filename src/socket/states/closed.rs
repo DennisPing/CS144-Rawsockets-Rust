@@ -1,13 +1,15 @@
+use crate::packet::packet_error::PacketError;
+use crate::socket::control_block::TcpControlBlock;
+use crate::socket::socket::{Receiver, Sender, TcpSocket, Timer};
+use crate::socket::states::listen::Listen;
+use crate::socket::states::syn_sent::SynSent;
+use crate::tcp::tcp_flags::TcpFlags;
+use crate::tcp::wrap32::Wrap32;
+use rand::random;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::Ipv4Addr;
 use std::time::Duration;
-use rand::random;
-use crate::tcp::errors::TcpError;
-use crate::tcp::socket::{Receiver, Sender, TcpControlBlock, TcpSocket, Timer};
-use crate::tcp::socket::states::listen::Listen;
-use crate::tcp::socket::states::syn_sent::SynSent;
-use crate::tcp::wrap32::Wrap32;
 
 pub struct Closed;
 
@@ -38,16 +40,19 @@ impl TcpSocket<Closed> {
             receiver,
             timer,
             state: PhantomData,
-
         }
     }
 
     /// Connect to a peer by initiating the 3-way handshake
-    pub fn connect(mut self, dst_ip: Ipv4Addr, dst_port: u16) -> Result<TcpSocket<SynSent>, TcpError> {
+    pub fn connect(
+        mut self,
+        dst_ip: Ipv4Addr,
+        dst_port: u16,
+    ) -> Result<TcpSocket<SynSent>, PacketError> {
         self.tcb.dst_ip = Some(dst_ip);
         self.tcb.dst_port = Some(dst_port);
 
-        self.send_syn()?;
+        self.send_segment(TcpFlags::SYN, None)?;
 
         Ok(TcpSocket {
             tcb: self.tcb,
@@ -59,7 +64,10 @@ impl TcpSocket<Closed> {
     }
 
     /// Listen for an incoming connection
-    pub fn listen(self) -> TcpSocket<Listen> {
+    pub fn listen(mut self, src_ip: Ipv4Addr, src_port: u16) -> TcpSocket<Listen> {
+        self.tcb.src_ip = src_ip;
+        self.tcb.src_port = src_port;
+
         TcpSocket {
             tcb: self.tcb,
             sender: self.sender,
