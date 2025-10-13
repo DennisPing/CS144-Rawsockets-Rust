@@ -1,50 +1,44 @@
-use crate::tcp::wrap32::Wrap32;
+//! TCP/IP wire errors for parsing and building packets.
+
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
-pub enum TcpError {
-    #[error("Bad checksum")]
+/// Errors during packet parsing/validation.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum WireError {
+    #[error("truncated: need {needed} bytes, got {got}")]
+    Truncated { needed: usize, got: usize },
+
+    #[error("bad checksum")]
     BadChecksum,
 
-    #[error("Invalid SEQ number: {expected} != {got}")]
-    InvalidSeqNumber { expected: Wrap32, got: Wrap32 },
+    #[error("IP version {0} not supported")]
+    IpVersionNotSupported(u8),
 
-    #[error("Invalid ACK number: {expected} != {got}")]
-    InvalidAckNumber { expected: Wrap32, got: Wrap32 },
+    #[error("protocol {0} not supported")]
+    ProtocolNotSupported(u8),
 
-    #[error("Resource temporarily unavailable")]
-    ResourceUnavailable, // EAGAIN
+    #[error("invalid TCP data offset: {0}")]
+    InvalidTcpDataOffset(u8),
 
-    #[error("Invalid state")]
-    InvalidState(&'static str), // EINVAL
+    #[error("invalid TCP option kind {0}")]
+    InvalidTcpOption(u8),
 
-    #[error("Invalid memory or resources")]
-    InvalidBuffer, // ENOBUFS
+    #[error("invalid header")]
+    InvalidHeader,
+}
 
-    #[error("Connection already in use")]
-    ConnectionInUse, // EADDRINUSE
+/// Errors during packet building/encoding.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum BuildError {
+    #[error("buffer too small: need {needed} bytes, got {got}")]
+    BufferTooSmall { needed: usize, got: usize },
 
-    #[error("Socket is already connected")]
-    IsConnected, // EISCONN
+    #[error("truncated: need {needed} bytes, got {got}")]
+    Truncated { needed: usize, got: usize },
 
-    #[error("Socket is not connected")]
-    NotConnected, // ENOTCONN
+    #[error("options not 32-bit aligned: {len} bytes")]
+    OptionsNotAligned { len: usize },
 
-    #[error("Connection timeout")]
-    ConnectionTimeout, // ETIMEDOUT
-
-    #[error("Connection reset")]
-    ConnectionReset, // ECONNRESET
-
-    #[error("Operation not supported")]
-    OperationNotSupported, // ENOTSUP
-
-    #[error("Address in use")]
-    AddressInUse, // EADDRINUSE
-
-    #[error("Address not available")]
-    AddressNotAvailable, // EADDRNOTAVAIL
-
-    #[error("Operation would block")]
-    WouldBlock, // EWOULDBLOCK
+    #[error("options too long: {len} bytes (max 40)")]
+    OptionsTooLong { len: usize },
 }

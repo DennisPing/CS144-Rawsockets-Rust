@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::io::{self, Error, ErrorKind, Read, Write};
+use std::io::{self, Read, Write};
 
 /// An in-order byte stream
 #[derive(Debug)]
@@ -98,7 +98,7 @@ impl Read for ByteStream {
 impl Write for ByteStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.closed {
-            return Err(Error::new(ErrorKind::Other, "stream closed"));
+            return Err(io::ErrorKind::BrokenPipe.into());
         }
         let available = self.remaining_capacity();
         let to_write = buf.len().min(available);
@@ -256,7 +256,7 @@ mod tests {
         let data = b"hello world";
         let result = bs.write(data);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::Other);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::BrokenPipe);
     }
 
     #[test]

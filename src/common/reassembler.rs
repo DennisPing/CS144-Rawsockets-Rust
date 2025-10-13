@@ -1,18 +1,18 @@
-use crate::socket::byte_stream::ByteStream;
 use std::collections::BTreeMap;
 use std::io;
 use std::io::{Read, Write};
+use crate::common::byte_stream::ByteStream;
 
 #[derive(Debug)]
 pub struct Reassembler {
     segments: BTreeMap<usize, Vec<u8>>, // Out-of-order segments. key = start index
     output: ByteStream,                 // The assembled ByteStream, ready to be read
-    next_byte_idx: usize,               // The next byte index expected to write
-    last_byte_idx: Option<usize>,       // The last byte index, if known
+    next_byte_idx: usize,               // The next contiguous byte offset expected to write
+    last_byte_idx: Option<usize>,       // The index after the end offset, if known
 }
 
 impl Reassembler {
-    /// New `Reassembler` with the provided `ByteStream` as output
+    /// New `Reassembler` with the provided `ByteStream` as output.
     pub fn new(output: ByteStream) -> Self {
         Reassembler {
             segments: BTreeMap::new(),
@@ -22,7 +22,7 @@ impl Reassembler {
         }
     }
 
-    /// Insert a new byte segment into the `Reassembler`
+    /// Insert a new segment into the `Reassembler`. Optionally mark it as the last segment.
     pub fn insert(&mut self, first_idx: usize, data: &[u8], is_last: bool) -> io::Result<()> {
         if data.is_empty() && !is_last {
             return Ok(());
@@ -30,7 +30,8 @@ impl Reassembler {
 
         // If this is the last segment, set `last_byte_idx`
         if is_last {
-            self.last_byte_idx = Some(first_idx + data.len());
+            let end = first_idx + data.len();
+            self.last_byte_idx = Some(self.last_byte_idx.map_or(end, |old| old.max(end)));
         }
 
         if self.is_done() {
@@ -38,8 +39,8 @@ impl Reassembler {
             return Ok(());
         }
 
-        // Buffer in the new segment
-        self.insert_buffer(first_idx, &data)?;
+        // Buffer in the new segment and merge overlaps
+        self.insert_buffer(first_idx, data)?;
 
         // Write as much as possible to the output stream
         self.write_output()?;
@@ -47,92 +48,85 @@ impl Reassembler {
         Ok(())
     }
 
-    /// The total number of bytes pending reassembly in the buffer
+    /// The total number of bytes pending reassembly in the buffer.
     pub fn bytes_pending(&self) -> usize {
         self.segments.values().map(|segment| segment.len()).sum()
     }
 
-    /// Get the underlying `ByteStream` output
+    /// Get the underlying assembled `ByteStream` output.
     pub fn get_output(&mut self) -> &ByteStream {
         &self.output
     }
 
-    /// Get the index of the next byte. Aka: tail of the ByteStream
+    /// Get the next contiguous byte offset.
     pub fn next_byte_idx(&self) -> usize {
         self.next_byte_idx
     }
 
-    /// Insert data into the buffer and merging any overlapping segments
+    /// Insert data into the buffer and merging any overlapping segments.
     fn insert_buffer(&mut self, first_idx: usize, data: &[u8]) -> io::Result<()> {
+        // 1) Clamp incoming segment to write cursor and available output capacity
         let last_idx = first_idx + data.len();
-
-        // Ignore the segment if it's entirely before the next expected byte
         if last_idx <= self.next_byte_idx {
-            return Ok(());
+            return Ok(()); // Incoming segment's end is entirely before the write cursor
         }
 
-        // Calculate the range of data to buffer based on incoming data and remaining capacity
-        let buffer_start = first_idx.max(self.next_byte_idx);
-        let buffer_end = last_idx.min(self.next_byte_idx + self.output.remaining_capacity());
-
-        if buffer_start >= buffer_end {
-            return Ok(()); // No capacity to buffer
+        let start = first_idx.max(self.next_byte_idx);
+        let cap_end = self.next_byte_idx + self.output.remaining_capacity();
+        if start >= cap_end {
+            return Ok(()); // No capacity left
         }
 
-        // Calculate the effective slice of data that fits within the buffer's capacity
-        let offset = buffer_start - first_idx;
-        let window = &data[offset..(buffer_end - first_idx)];
+        let end = last_idx.min(cap_end);
+        let window_offset = start - first_idx;
+        let window = &data[window_offset..window_offset + (end - start)];
 
-        // Set the merge range to encompass the entire new data. It may grow or shrink later on
-        let mut merge_start = buffer_start;
-        let mut merge_end = buffer_end;
+        // 2) Split map at `start`: left (< start) stays in map; right (>= start) splits off.
+        let mut right = self.segments.split_off(&start);
 
-        // Find all existing segments that overlap with the new data range. Thanks OpenAI :)
-        let overlapping_keys: Vec<usize> = self
-            .segments
-            .range(..buffer_end)
-            .filter_map(|(&seg_start, seg_data)| {
-                let seg_end = seg_start + seg_data.len();
-                if seg_end > buffer_start {
-                    Some(seg_start)
-                } else {
-                    None
-                }
-            })
-            .collect();
+        // Current merge range.
+        let mut merge_start = start;
+        let mut merge_end = end;
 
-        // If there are no overlapping segments, just insert the new window directly
-        if overlapping_keys.is_empty() {
-            self.segments.insert(buffer_start, Vec::from(window));
-            return Ok(());
-        }
+        // Vector of neighbor pieces that will be layered into the merged result.
+        let mut pieces: Vec<(usize, Vec<u8>)> = Vec::new();
 
-        // Collect and remove overlapping segments. Update the merge range accordingly
-        let mut overlapping_segments: Vec<(usize, Vec<u8>)> = Vec::new();
-        for &key in &overlapping_keys {
-            if let Some(seg) = self.segments.remove(&key) {
-                merge_start = merge_start.min(key);
-                merge_end = merge_end.max(key + seg.len());
-                overlapping_segments.push((key, seg));
+        // 3) Check if left neighbor overlaps or touches the merge start.
+        if let Some((&l_start, l_seg)) = self.segments.last_key_value() {
+            let l_end = l_start + l_seg.len();
+            if l_end >= merge_start {
+                let l_seg = self.segments.remove(&l_start).unwrap();
+                merge_start = l_start.min(merge_start);
+                merge_end = merge_end.max(l_end); // Expand merge window
+                pieces.push((l_start, l_seg)); // Re-add left neighbor
             }
         }
 
-        // Allocate a new buffer to hold the merged data
-        let merged_len = merge_end - merge_start;
-        let mut merged = vec![0u8; merged_len];
-
-        // Overlay existing overlapping segments onto the merged buffer
-        for (seg_start, seg) in &overlapping_segments {
-            let cut_start = seg_start - merge_start;
-            merged[cut_start..cut_start + seg.len()].copy_from_slice(seg);
+        // 4) Pull in right neighbors (nb) while they overlap or touch.
+        while let Some((&r_start, _)) = right.first_key_value() {
+            if r_start > merge_end {
+                break; // No more overlaps
+            }
+            let (nb_start, nb_seg) = right.pop_first().unwrap();
+            let nb_end = nb_start + nb_seg.len();
+            merge_end = merge_end.max(nb_end);
+            pieces.push((nb_start, nb_seg));
         }
 
-        // Overlay the new incoming data onto the merged buffer
-        let new_data_start = buffer_start - merge_start;
-        merged[new_data_start..new_data_start + window.len()].copy_from_slice(window);
+        // 5) Append the right-hand map (any non-overlapping segments) into our buffer.
+        self.segments.append(&mut right);
 
-        // Insert the merged segment back into the BTreeMap
-        self.segments.insert(merge_start, merged.to_vec());
+        // 6) Build the merged segment. Overlay old pieces and then the new window.
+        let mut merged = vec![0u8; merge_end - merge_start];
+        for (start_idx, segment) in &pieces { // Overlay all left + right segments
+            let offset = *start_idx - merge_start;
+            merged[offset..offset + segment.len()].copy_from_slice(segment);
+        }
+        let new_offset = start - merge_start;
+        merged[new_offset..new_offset + window.len()].copy_from_slice(window);
+
+        // 7) Insert the merged result.
+        self.segments.insert(merge_start, merged);
 
         // Time complexity:
         // Worse case: O(k log n + k * m)
@@ -142,38 +136,33 @@ impl Reassembler {
         Ok(())
     }
 
-    /// Write contiguous data from the buffer to the output `ByteStream`
+    /// Write contiguous data from the buffer to the output `ByteStream`.
     fn write_output(&mut self) -> io::Result<()> {
-        while let Some(mut data) = self.segments.remove(&self.next_byte_idx) {
-            let n = self.output.write(&data)?;
-
+        while let Some(mut seg) = self.segments.remove(&self.next_byte_idx) {
+            let n = self.output.write(&seg)?;
             if n == 0 {
-                // Unable to write to ByteStream, then re-insert the segment and break
-                self.segments.insert(self.next_byte_idx, data);
+                // Unable to write; reinsert and stop.
+                self.segments.insert(self.next_byte_idx, seg);
                 break;
             }
-
-            if n < data.len() {
-                // Partial write occurred; store the remaining data
-                let rem_data = data.split_off(n);
-                self.segments.insert(self.next_byte_idx + n, rem_data);
+            if n < seg.len() {
+                // Partial write: keep remainder by splitting without copying the prefix.
+                let rem = seg.split_off(n);
+                self.segments.insert(self.next_byte_idx + n, rem);
                 self.next_byte_idx += n;
                 break;
-            } else {
-                // Full write occurred
-                self.next_byte_idx += n;
             }
+            self.next_byte_idx += n;
 
             if self.is_done() {
                 self.output.close();
                 break;
             }
         }
-
         Ok(())
     }
 
-    /// Check if all the data has been received and written out
+    /// Check if all the data has been received and written out.
     fn is_done(&self) -> bool {
         if let Some(last_idx) = self.last_byte_idx {
             self.next_byte_idx >= last_idx
@@ -501,10 +490,10 @@ mod tests {
         assert_eq!("abcdefgh", actual);
 
         // Perform 1000 random insertions
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..1000 {
-            let j = rng.gen_range(0..8);
-            let k = rng.gen_range(j..8);
+            let j = rng.random_range(0..8);
+            let k = rng.random_range(j..8);
 
             let chunk = &data[j..k];
             ra.insert(j, chunk, false).unwrap();
@@ -739,7 +728,7 @@ mod tests {
         let max_seg_len = 2048;
         let max_offset_shift = 1023; // Maximum shift to introduce overlaps
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..n_reps {
             let capacity = n_segs * max_seg_len;
             let mut ra = create_reassembler(capacity);
@@ -749,8 +738,8 @@ mod tests {
 
             // Generate segments with possible overlaps
             for _ in 0..n_segs {
-                let seg_len = 1 + rng.gen_range(0..max_seg_len - 1);
-                let shift = total_len.min(1 + rng.gen_range(0..max_offset_shift));
+                let seg_len = 1 + rng.random_range(0..max_seg_len - 1);
+                let shift = total_len.min(1 + rng.random_range(0..max_offset_shift));
                 let start = total_len - shift;
                 let seg_size = seg_len + shift;
                 segments.push((start, seg_size));

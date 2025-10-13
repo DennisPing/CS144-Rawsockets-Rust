@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 bitflags! {
     // Bit positions [ CWR, ECE, URG, ACK, PSH, RST, SYN, FIN ]
-    #[derive(Debug, Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     pub struct TcpFlags: u8 {
         const CWR = 1 << 7;
         const ECE = 1 << 6;

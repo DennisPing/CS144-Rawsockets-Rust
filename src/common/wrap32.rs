@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Wrap32 {
     value: u32,
 }
@@ -18,6 +18,11 @@ impl Wrap32 {
     /// Get the raw `u32` value
     pub fn value(&self) -> u32 {
         self.value
+    }
+
+    /// Convert to big-endian bytes for wire encoding.
+    pub fn to_be_bytes(&self) -> [u8; 4] {
+        self.value.to_be_bytes()
     }
 
     /// Wrap an absolute `seq_no` given an `initial seq_no`
@@ -76,8 +81,8 @@ impl Display for Wrap32 {
 
 #[cfg(test)]
 mod tests {
-    use rand::distributions::Distribution;
-    use rand::distributions::Uniform;
+    use rand::distr::Uniform;
+    use rand::distr::Distribution;
     use rand::Rng;
     use rayon::prelude::*;
     use super::*;
@@ -213,10 +218,10 @@ mod tests {
     #[test]
     fn test_equality_random() {
         let n_reps = 32768;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..n_reps {
-            let n: u32 = rng.gen();
-            let diff: u8 = rng.gen();
+            let n: u32 = rng.random();
+            let diff: u8 = rng.random();
             let m: u32 = n + diff as u32;
 
             let wrap_n = Wrap32::new(n);
@@ -236,14 +241,14 @@ mod tests {
         }
 
         let n_reps = 1_000_000;
-        let dist31minus1 = Uniform::from(0u32..=(1u32 << 31) - 1);
-        let dist32 = Uniform::from(0u32..=u32::MAX);
+        let dist31minus1 = Uniform::new_inclusive(0u32, (1u32<<31)-1).unwrap();
+        let dist32 = Uniform::new_inclusive(0u32, u32::MAX).unwrap();
         let big_offset: u64 = (1u64 << 31) - 1;
-        let dist63 = Uniform::from(big_offset..=(1u64 << 63));
+        let dist63 = Uniform::new_inclusive(big_offset, 1u64 << 63).unwrap();
 
         // Run parallel tests because we don't have all day
         (0..n_reps).into_par_iter().for_each(|_| {
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             let isn_value = dist32.sample(&mut rng);
             let isn = Wrap32::new(isn_value);
             let val = dist63.sample(&mut rng);

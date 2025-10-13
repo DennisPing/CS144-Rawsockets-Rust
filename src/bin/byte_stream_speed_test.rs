@@ -1,10 +1,10 @@
-use net::socket::byte_stream::ByteStream;
 use rand::prelude::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;
 use std::io;
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{Error, Read, Write};
 use std::time::Instant;
+use net::common::byte_stream::ByteStream;
 
 fn speed_test(
     input_len: usize,
@@ -56,8 +56,7 @@ fn speed_test(
 
     // Validate data
     if data != output_buffer {
-        return Err(Error::new(
-            ErrorKind::Other,
+        return Err(Error::other(
             "Data written does not equal data read :(",
         ));
     }
@@ -88,6 +87,14 @@ fn main() {
         std::process::exit(1);
     };
 
-    // Result:
-    // ByteStream with capacity=32768, write_size=1500, read_size=128 reached 15.40 Gbit/s
+    /*
+    Model Name: MacBook Pro
+      Model Identifier: Mac16,8
+      Model Number: MX2J3LL/A
+      Chip: Apple M4 Pro
+      Total Number of Cores: 14 (10 performance and 4 efficiency)
+      Memory: 24 GB
+
+      ByteStream with capacity=32768, write_size=1500, read_size=128 reached 31.14 Gbit/s
+    */
 }

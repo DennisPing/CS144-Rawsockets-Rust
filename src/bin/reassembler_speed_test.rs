@@ -1,11 +1,11 @@
-use net::socket::byte_stream::ByteStream;
-use net::socket::reassembler::Reassembler;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;
 use std::io;
 use std::io::{Error, ErrorKind, Read};
 use std::time::Instant;
+use net::common::byte_stream::ByteStream;
+use net::common::reassembler::Reassembler;
 
 fn speed_test(num_chunks: usize, capacity: usize, random_seed: usize) -> io::Result<()> {
     // Generate random data
@@ -57,22 +57,20 @@ fn speed_test(num_chunks: usize, capacity: usize, random_seed: usize) -> io::Res
     let duration = t0.elapsed();
 
     if !ra.get_output().eof() {
-        return Err(Error::new(
-            ErrorKind::Other,
+        return Err(Error::other(
             "Reassembler did not close ByteStream when finished",
         ));
     }
 
     if data != output_buffer {
-        return Err(Error::new(
-            ErrorKind::Other,
+        return Err(Error::other(
             "Mismatch between data written and data read",
         ));
     }
 
     // Calculate throughput
     let duration_secs = duration.as_secs_f64();
-    let bytes_per_sec = (num_chunks * capacity) as f64 / duration_secs;
+    let bytes_per_sec = data.len() as f64 / duration_secs;
     let bits_per_sec = bytes_per_sec * 8.0;
     let gigabits_per_sec = bits_per_sec / 1e9;
 
@@ -93,6 +91,14 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Result:
-    // Reassembler to ByteStream with capacity=1500 reached 13.20 Gbit/s
+    /*
+    Model Name: MacBook Pro
+      Model Identifier: Mac16,8
+      Model Number: MX2J3LL/A
+      Chip: Apple M4 Pro
+      Total Number of Cores: 14 (10 performance and 4 efficiency)
+      Memory: 24 GB
+
+      Reassembler to ByteStream with capacity=1500 reached 40.48 Gbit/s
+    */
 }
