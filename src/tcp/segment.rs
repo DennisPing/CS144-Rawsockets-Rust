@@ -1,40 +1,15 @@
-//! Owned TCP segment with builder-style construction.
-//!
-//! Two-layer design:
-//! - `TcpSegment` - Owned data with builder methods and serialization
-//! - `TcpView` - Zero-copy view for parsing (see tcp_segment_view)
-
+use crate::common::checksum::tcp_checksum;
 use crate::common::wrap32::Wrap32;
-use crate::ip::ip_datagram::IpDatagram;
-use crate::tcp::tcp_checksum::tcp_checksum_for_segment;
-use crate::tcp::tcp_error::BuildError;
-use crate::tcp::tcp_flags::TcpFlags;
-use crate::tcp::tcp_options::TcpOptions;
-use crate::tcp::tcp_segment_view::{TcpView, TCP_HDR_MIN_SIZE};
+use crate::ip::datagram::{IpDatagram, IpProtocol};
+use crate::tcp::error::BuildError;
+use crate::tcp::flags::TcpFlags;
+use crate::tcp::options::TcpOptions;
+use crate::tcp::view::{TcpView, TCP_HDR_MIN_SIZE};
 use std::net::Ipv4Addr;
 
 pub const TCP_DEFAULT_WINDOW: u16 = 65535;
 
 /// An owned TCP segment with builder-style construction.
-///
-/// # Construction
-///
-/// Use `new()` for minimal construction or chain builder methods:
-///
-/// ```ignore
-/// let seg = TcpSegment::new(src_port, dst_port)
-///     .seq(Wrap32::new(1000))
-///     .syn()
-///     .options(TcpOptions::builder().mss(1460).into_options());
-/// ```
-///
-/// # Serialization
-///
-/// ```ignore
-/// let bytes = seg.to_bytes(src_ip, dst_ip);
-/// // or into existing buffer:
-/// let len = seg.encode_into(&mut buf, src_ip, dst_ip)?;
-/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TcpSegment {
     pub src_port: u16,
@@ -162,11 +137,11 @@ impl TcpSegment {
 
     /// Header length in bytes (20 + options).
     pub fn header_len(&self) -> usize {
-        TCP_HDR_MIN_SIZE + self.options.wire_len()
+        TCP_HDR_MIN_SIZE + self.options.options_len()
     }
 
     /// Total wire length (header + payload).
-    pub fn wire_len(&self) -> usize {
+    pub fn segment_len(&self) -> usize {
         self.header_len() + self.payload.len()
     }
 
@@ -189,7 +164,7 @@ impl TcpSegment {
 
     /// Serialize to a new `Vec<u8>`.
     pub fn to_bytes(&self, src: Ipv4Addr, dst: Ipv4Addr) -> Vec<u8> {
-        let mut buf = vec![0u8; self.wire_len()];
+        let mut buf = vec![0u8; self.segment_len()];
         self.encode_into(&mut buf, src, dst)
             .expect("buffer sized correctly");
         buf
@@ -202,8 +177,8 @@ impl TcpSegment {
         src: Ipv4Addr,
         dst: Ipv4Addr,
     ) -> Result<usize, BuildError> {
-        let options_bytes = self.options.to_bytes_padded();
-        let header_len = TCP_HDR_MIN_SIZE + options_bytes.len();
+        let (opt_bytes, opt_len) = self.options.to_bytes();
+        let header_len = TCP_HDR_MIN_SIZE + opt_len;
         let total_len = header_len + self.payload.len();
 
         if buf.len() < total_len {
@@ -214,16 +189,16 @@ impl TcpSegment {
         }
 
         // Validate options alignment
-        if options_bytes.len() % 4 != 0 {
+        if opt_len % 4 != 0 {
             return Err(BuildError::OptionsNotAligned {
-                len: options_bytes.len(),
+                len: opt_len,
             });
         }
 
         let data_offset = (header_len / 4) as u8;
         if data_offset > 15 {
             return Err(BuildError::OptionsTooLong {
-                len: options_bytes.len(),
+                len: opt_len,
             });
         }
 
@@ -239,25 +214,20 @@ impl TcpSegment {
         buf[18..20].copy_from_slice(&self.urgent_ptr.to_be_bytes());
 
         // Write options
-        if !options_bytes.is_empty() {
-            buf[TCP_HDR_MIN_SIZE..header_len].copy_from_slice(&options_bytes);
+        if !opt_len != 0 {
+            buf[TCP_HDR_MIN_SIZE..header_len].copy_from_slice(&opt_bytes[..opt_len]);
         }
 
         // Write payload
         buf[header_len..total_len].copy_from_slice(&self.payload);
 
         // Compute and insert checksum
-        let checksum = tcp_checksum_for_segment(src, dst, &buf[..total_len]);
+        let checksum = tcp_checksum(src, dst, IpProtocol::Tcp, &buf[..total_len]);
         buf[16..18].copy_from_slice(&checksum.to_be_bytes());
 
         Ok(total_len)
     }
 
-    /// Wrap this TCP segment into an owned `IpDatagram`.
-    pub fn into_ip(self, src: Ipv4Addr, dst: Ipv4Addr) -> IpDatagram {
-        let payload = self.to_bytes(src, dst);
-        IpDatagram::new(src, dst).payload(payload)
-    }
 }
 
 impl Default for TcpSegment {
@@ -283,8 +253,8 @@ impl Default for TcpSegment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tcp::wireshark_sample;
-    use crate::tcp::wireshark_sample::hex_to_bytes;
+    use crate::common::checksum::tcp_checksum;
+    use crate::testing::wireshark;
     use std::net::Ipv4Addr;
 
     #[test]
@@ -297,18 +267,17 @@ mod tests {
             .seq(Wrap32::new(2753993875))
             .syn()
             .options(
-                TcpOptions::builder()
+                TcpOptions::new()
                     .mss(1460)
                     .wscale(6)
                     .timestamp(3144186360, 0)
-                    .sack_permitted()
-                    .into_options(),
+                    .sack_permitted(true),
             );
 
         let encoded = seg.to_bytes(src_ip, dst_ip);
 
         // Verify checksum is valid (sum to 0)
-        assert_eq!(tcp_checksum_for_segment(src_ip, dst_ip, &encoded), 0);
+        assert_eq!(tcp_checksum(src_ip, dst_ip, IpProtocol::Tcp, &encoded), 0);
 
         // Verify we can parse it back
         let view = TcpView::parse(&encoded, src_ip, dst_ip).unwrap();
@@ -320,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_tcp_segment_decode() {
-        let tcp_bytes = hex_to_bytes(wireshark_sample::tcp_hex());
+        let tcp_bytes = hex::decode(wireshark::tcp_hex()).unwrap();
         let src_ip = Ipv4Addr::new(10, 110, 208, 106);
         let dst_ip = Ipv4Addr::new(204, 44, 192, 60);
 
@@ -346,7 +315,7 @@ mod tests {
             .seq(Wrap32::new(1000))
             .ack(Wrap32::new(2000))
             .syn()
-            .options(TcpOptions::builder().mss(1460).wscale(7).into_options())
+            .options(TcpOptions::new().mss(1460).wscale(7))
             .payload_from_slice(b"hello");
 
         let encoded = seg.to_bytes(src_ip, dst_ip);
@@ -363,19 +332,4 @@ mod tests {
         assert_eq!(decoded.payload, b"hello");
     }
 
-    #[test]
-    fn test_tcp_segment_into_ip() {
-        let src_ip = Ipv4Addr::new(10, 110, 208, 106);
-        let dst_ip = Ipv4Addr::new(204, 44, 192, 60);
-
-        let seg = TcpSegment::new(12345, 80)
-            .seq(Wrap32::new(1000))
-            .ack(Wrap32::new(2000))
-            .payload_from_slice(b"test");
-
-        let ip = seg.into_ip(src_ip, dst_ip);
-        assert_eq!(ip.src, src_ip);
-        assert_eq!(ip.dst, dst_ip);
-        assert_eq!(ip.protocol, crate::ip::ip_datagram::IPPROTO_TCP);
-    }
 }

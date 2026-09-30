@@ -1,22 +1,23 @@
-use crate::ip::ip_datagram::{IpDatagram, IPPROTO_TCP, IPV4, IP_HDR_MIN_SIZE};
-use crate::ip::ip_flags::IpFlags;
-use crate::ip::pseudoheader::PseudoHeader;
-use crate::tcp::tcp_checksum::ipv4_header_checksum;
-use crate::tcp::tcp_segment_view::TcpView;
+use crate::common::checksum::ip_checksum;
+use crate::ip::datagram::{IpDatagram, IpProtocol, IPV4, IP_HDR_SIZE};
+use crate::ip::flags::IpFlags;
+use crate::tcp::view::TcpView;
 use crate::tcp::WireError;
 use std::net::Ipv4Addr;
 
+/// Borrowed view of an IpDatagram. The "read-only" side.
 #[derive(Clone, Copy)]
 pub struct IpView<'a> {
     data: &'a [u8],    // The IP datagram (header + payload)
     header_len: usize, // Cached header length
+    total_len: usize,
 }
 
 impl<'a> IpView<'a> {
     pub fn parse(data: &'a [u8]) -> Result<Self, WireError> {
-        if data.len() < IP_HDR_MIN_SIZE {
+        if data.len() < IP_HDR_SIZE {
             return Err(WireError::Truncated {
-                needed: IP_HDR_MIN_SIZE,
+                needed: IP_HDR_SIZE,
                 got: data.len(),
             });
         }
@@ -43,7 +44,7 @@ impl<'a> IpView<'a> {
         }
 
         // Validate checksum
-        if ipv4_header_checksum(&data[..header_len]) != 0 {
+        if ip_checksum(&data[..header_len]) != 0 {
             return Err(WireError::BadChecksum);
         }
 
@@ -59,18 +60,26 @@ impl<'a> IpView<'a> {
             });
         }
 
-        Ok(Self { data, header_len })
+        Ok(Self { data, header_len, total_len })
     }
 
     /// IP version (always 4 for us)
     #[inline]
-    pub const fn version(&self) -> u8 {
-        IPV4
+    pub fn version(&self) -> u8 {
+        self.data[0] >> 4
+    }
+
+    /// Internet header length as 32-bit words (min value is 5)
+    ///
+    /// Example: 5 words * 32 bits = 160 bits / 8 = 20 bytes long
+    #[inline]
+    pub fn ihl(&self) -> u8 {
+        self.data[0] & 0x0f
     }
 
     /// Header length only
     #[inline]
-    pub const fn header_len(&self) -> usize {
+    pub fn header_len(&self) -> usize {
         self.header_len
     }
 
@@ -110,22 +119,25 @@ impl<'a> IpView<'a> {
         self.data[8]
     }
 
-    /// Protocol number (6 = TCP, 17 = UDP)
+    /// IP protocol
     #[inline]
-    pub fn protocol(&self) -> u8 {
-        self.data[9]
+    pub fn protocol(&self) -> IpProtocol {
+        IpProtocol::from(self.data[9])
     }
 
+    /// IP checksum
     #[inline]
     pub fn checksum(&self) -> u16 {
         u16::from_be_bytes([self.data[10], self.data[11]])
     }
 
+    /// Source address
     #[inline]
     pub fn src(&self) -> Ipv4Addr {
         Ipv4Addr::new(self.data[12], self.data[13], self.data[14], self.data[15])
     }
 
+    /// Destination address
     #[inline]
     pub fn dst(&self) -> Ipv4Addr {
         Ipv4Addr::new(self.data[16], self.data[17], self.data[18], self.data[19])
@@ -134,7 +146,7 @@ impl<'a> IpView<'a> {
     /// IP options (if any). Empty slice if IHL = 5
     #[inline]
     pub fn options(&self) -> &'a [u8] {
-        &self.data[IP_HDR_MIN_SIZE..self.header_len]
+        &self.data[IP_HDR_SIZE..self.header_len]
     }
 
     /// Slices to exact IP payload (automatically trims any trailing Ethernet frame padding).
@@ -150,19 +162,10 @@ impl<'a> IpView<'a> {
 
     /// Parse the payload directly as a TCP segment view with checksum validation.
     pub fn tcp(&self) -> Result<TcpView<'a>, WireError> {
-        if self.protocol() != IPPROTO_TCP {
-            return Err(WireError::ProtocolNotSupported(self.protocol()));
+        match self.protocol() {
+            IpProtocol::Tcp => TcpView::parse(self.payload(), self.src(), self.dst()),
+            _ => Err(WireError::ProtocolNotSupported(self.protocol() as u8)),
         }
-        TcpView::parse(self.payload(), self.src(), self.dst())
-    }
-
-    pub fn pseudo_header(&self) -> PseudoHeader {
-        PseudoHeader::new(
-            self.src(),
-            self.dst(),
-            self.protocol(),
-            self.payload().len() as u16,
-        )
     }
 
     pub fn to_owned(&self) -> IpDatagram {
@@ -185,27 +188,27 @@ impl<'a> From<IpView<'a>> for IpDatagram {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tcp::wireshark_sample::{self, hex_concat};
+    use crate::testing::wireshark;
 
     #[test]
     fn test_ip_view_parse() {
-        let ip_bytes = hex_concat(&[wireshark_sample::ip_hex(), wireshark_sample::tcp_hex()]);
+        let ip_bytes = wireshark::hex_concat(&[wireshark::ip_hex(), wireshark::tcp_hex()]);
         let view = IpView::parse(&ip_bytes).unwrap();
 
         assert_eq!(view.version(), 4);
         assert_eq!(view.header_len(), 20);
         assert_eq!(view.total_len(), 64);
-        assert_eq!(view.protocol(), IPPROTO_TCP);
+        assert_eq!(view.protocol(), IpProtocol::Tcp);
         assert_eq!(view.src(), Ipv4Addr::new(10, 110, 208, 106));
         assert_eq!(view.dst(), Ipv4Addr::new(204, 44, 192, 60));
     }
 
     #[test]
     fn test_ip_view_to_tcp() {
-        let raw_bytes = hex_concat(&[
-            wireshark_sample::ip_with_payload_hex(),
-            wireshark_sample::tcp_with_payload_hex(),
-            wireshark_sample::giant_payload_hex(),
+        let raw_bytes = wireshark::hex_concat(&[
+            wireshark::ip_with_payload_hex(),
+            wireshark::tcp_with_payload_hex(),
+            wireshark::giant_payload_hex(),
         ]);
 
         let ip_view = IpView::parse(&raw_bytes).unwrap();

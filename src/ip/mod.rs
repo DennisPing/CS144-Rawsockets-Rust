@@ -1,8 +1,7 @@
-pub mod ip_datagram;
-pub mod ip_datagram_view;
-pub mod ip_flags;
-pub mod pseudoheader;
+pub mod datagram;
+pub mod view;
+pub mod flags;
 
-pub use ip_datagram::IpDatagram;
-pub use ip_datagram_view::IpView;
-pub use ip_flags::IpFlags;
+pub use datagram::IpDatagram;
+pub use view::IpView;
+pub use flags::IpFlags;

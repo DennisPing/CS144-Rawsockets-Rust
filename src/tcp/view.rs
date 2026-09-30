@@ -3,11 +3,11 @@
 //! `TcpView` borrows a byte slice and provides accessor methods to read
 //! header fields without allocation. Validation happens at construction time.
 
+use crate::common::checksum::tcp_checksum;
 use crate::common::wrap32::Wrap32;
-use crate::tcp::tcp_checksum::tcp_checksum_for_segment;
-use crate::tcp::tcp_flags::TcpFlags;
-use crate::tcp::tcp_options::TcpOptionsView;
-use crate::tcp::WireError;
+use crate::ip::datagram::IpProtocol;
+use crate::tcp::flags::TcpFlags;
+use crate::tcp::{TcpOptions, WireError};
 use std::net::Ipv4Addr;
 
 pub const TCP_HDR_MIN_SIZE: usize = 20;
@@ -30,7 +30,7 @@ impl<'a> TcpView<'a> {
     pub fn parse(data: &'a [u8], src: Ipv4Addr, dst: Ipv4Addr) -> Result<Self, WireError> {
         let view = Self::parse_unchecked(data)?;
 
-        if tcp_checksum_for_segment(src, dst, data) != 0 {
+        if tcp_checksum(src, dst, IpProtocol::Tcp, data) != 0 {
             return Err(WireError::BadChecksum);
         }
 
@@ -123,34 +123,38 @@ impl<'a> TcpView<'a> {
         u16::from_be_bytes([self.data[18], self.data[19]])
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // TCP Options accessors
+    // ─────────────────────────────────────────────────────────────
+
     /// TCP options as a zero-copy view.
     #[inline]
-    pub fn options(&self) -> TcpOptionsView<'a> {
-        TcpOptionsView::new(&self.data[TCP_HDR_MIN_SIZE..self.header_len])
+    pub fn options(&self) -> Result<TcpOptions, WireError> {
+        TcpOptions::parse(&self.data[TCP_HDR_MIN_SIZE..self.header_len])
     }
 
     /// Find MSS option value.
     #[inline]
     pub fn mss(&self) -> Option<u16> {
-        self.options().mss()
+        self.options().ok().and_then(|opts| opts.mss)
     }
 
     /// Find Window Scale option value.
     #[inline]
     pub fn window_scale(&self) -> Option<u8> {
-        self.options().window_scale()
+        self.options().ok().and_then(|opts| opts.wscale)
     }
 
     /// Find Timestamp option value (ts_val, ts_ecr).
     #[inline]
     pub fn timestamp(&self) -> Option<(u32, u32)> {
-        self.options().timestamp()
+        self.options().ok().and_then(|opts| opts.timestamp)
     }
 
     /// Check if SACK permitted option is present.
     #[inline]
     pub fn sack_permitted(&self) -> bool {
-        self.options().sack_permitted()
+        self.options().ok().map(|opts| opts.sack_permitted).unwrap_or(false)
     }
 
     /// Payload bytes after the header.
@@ -166,7 +170,7 @@ impl<'a> TcpView<'a> {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Flag convenience methods
+    // TCP Flags convenience methods
     // ─────────────────────────────────────────────────────────────
 
     #[inline]
@@ -253,12 +257,12 @@ impl<'a> From<TcpView<'a>> for super::TcpSegment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tcp::wireshark_sample::{self, hex_concat};
+    use crate::testing::wireshark;
     use std::net::Ipv4Addr;
 
     #[test]
     fn test_tcp_view_parse() {
-        let tcp_bytes = hex::decode(wireshark_sample::tcp_hex()).unwrap();
+        let tcp_bytes = hex::decode(wireshark::tcp_hex()).unwrap();
         let src = Ipv4Addr::new(10, 110, 208, 106);
         let dst = Ipv4Addr::new(204, 44, 192, 60);
 
@@ -283,9 +287,9 @@ mod tests {
 
     #[test]
     fn test_tcp_view_with_payload() {
-        let tcp_bytes = hex_concat(&[
-            wireshark_sample::tcp_with_payload_hex(),
-            wireshark_sample::giant_payload_hex(),
+        let tcp_bytes = wireshark::hex_concat(&[
+            wireshark::tcp_with_payload_hex(),
+            wireshark::giant_payload_hex(),
         ]);
         let src = Ipv4Addr::new(204, 44, 192, 60);
         let dst = Ipv4Addr::new(10, 110, 208, 106);
