@@ -83,7 +83,7 @@ impl Display for Wrap32 {
 mod tests {
     use rand::distr::Uniform;
     use rand::distr::Distribution;
-    use rand::Rng;
+    use rand::{Rng, RngExt};
     use rayon::prelude::*;
     use super::*;
 

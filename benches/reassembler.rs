@@ -4,7 +4,7 @@ use criterion::{
 use net::common::byte_stream::ByteStream;
 use net::common::reassembler::Reassembler;
 use rand::rngs::StdRng;
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use std::hint::black_box;
 use std::io::{ErrorKind, Read};
 use std::time::Duration;

@@ -161,7 +161,7 @@ impl Read for Reassembler {
 mod tests {
     use super::*;
     use rand::seq::SliceRandom;
-    use rand::{Rng, RngCore};
+    use rand::{Rng, RngExt};
     use std::io::Read;
 
     fn create_reassembler(capacity: usize) -> Reassembler {

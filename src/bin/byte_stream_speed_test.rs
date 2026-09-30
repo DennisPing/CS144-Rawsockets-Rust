@@ -1,5 +1,5 @@
 use rand::prelude::StdRng;
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use std::collections::VecDeque;
 use std::io;
 use std::io::{Error, Read, Write};
