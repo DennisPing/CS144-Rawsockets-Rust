@@ -56,7 +56,7 @@ fn speed_test(num_chunks: usize, capacity: usize, random_seed: usize) -> io::Res
 
     let duration = t0.elapsed();
 
-    if !ra.get_output().eof() {
+    if !ra.output().eof() {
         return Err(Error::other(
             "Reassembler did not close ByteStream when finished",
         ));

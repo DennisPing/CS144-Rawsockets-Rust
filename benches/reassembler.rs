@@ -1,191 +1,120 @@
-use criterion::{
-    criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode, Throughput,
-};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use net::common::byte_stream::ByteStream;
 use net::common::reassembler::Reassembler;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::hint::black_box;
-use std::io::{ErrorKind, Read};
-use std::time::Duration;
+use std::io::Read;
 
-struct BenchConfig {
-    name: &'static str,
-    dataset_size: usize,
-    capacity: usize,
-    seed: u64,
-}
+const CAPACITY: usize = 65_535; // Largest receive window a TCP header can advertise
+const SEGMENT_SIZE: usize = 1_460; // Standard TCP maximum segment size on Ethernet
+const DATASET_SIZE: usize = 8 * 1024 * 1024; // 8 MB
+const SEED: u64 = 1370;
 
-#[derive(Clone, Debug)]
-struct Segment {
+struct Segment<'a> {
     start_idx: usize,
-    data: Vec<u8>,
+    data: &'a [u8],
     is_last: bool,
 }
 
-/// Generate one big random buffer. Each segment will copy its own slice from here.
-fn gen_dataset(total_bytes: usize, seed: u64) -> Vec<u8> {
-    let mut rng = StdRng::seed_from_u64(seed);
-    let mut dataset = vec![0u8; total_bytes];
+/// Generate one big random buffer. Each segment borrows its own slice from here.
+fn gen_dataset() -> Vec<u8> {
+    let mut rng = StdRng::seed_from_u64(SEED);
+    let mut dataset = vec![0u8; DATASET_SIZE];
     rng.fill_bytes(&mut dataset);
     dataset
 }
 
-/// Build staggered overlapping segments.
-fn build_segments(data: &[u8], capacity: usize) -> Vec<Segment> {
-    let mut segments: Vec<Segment> = Vec::new();
+/// Cut the segment [start, start + len) out of the dataset, clamped to the end of the dataset.
+fn segment_at(dataset: &[u8], start: usize, len: usize) -> Segment<'_> {
+    let end = (start + len).min(dataset.len());
+    Segment {
+        start_idx: start,
+        data: &dataset[start..end],
+        is_last: end == dataset.len(),
+    }
+}
 
-    let mut i = 0;
-    while i < data.len() {
+/// Mostly in-order segments that overlap their neighbors and repeat bytes already received.
+fn staggered_overlap(dataset: &[u8]) -> Vec<Segment<'_>> {
+    let mut segments = Vec::new();
+    for step in (0..dataset.len()).step_by(SEGMENT_SIZE) {
         // Small offsets (+2, +0, +1) to induce overlap
-        for &offset in &[2usize, 0, 1] {
-            let start = i.saturating_add(offset);
-            if start >= data.len() {
-                continue;
-            }
-            let end = (start + capacity * 2).min(data.len());
-            let is_last = end == data.len();
-            if start < end {
-                segments.push(Segment {
-                    start_idx: start,
-                    data: data[start..end].to_vec(),
-                    is_last,
-                });
+        for offset in [2, 0, 1] {
+            let start = step + offset;
+            if start < dataset.len() {
+                segments.push(segment_at(dataset, start, 2 * SEGMENT_SIZE));
             }
         }
-        i = i.saturating_add(capacity);
     }
+    segments
+}
 
+/// Out-of-order segments in groups of 8, sent so that gaps open up and are then filled in.
+fn gaps_then_fill(dataset: &[u8]) -> Vec<Segment<'_>> {
+    // 1, 3, 5, 7 leave four separate ranges; 6, 4, 2 each join two ranges; 0 fills the last gap
+    const SEND_ORDER: [usize; 8] = [1, 3, 5, 7, 6, 4, 2, 0];
+
+    let mut segments = Vec::new();
+    for group_start in (0..dataset.len()).step_by(SEND_ORDER.len() * SEGMENT_SIZE) {
+        for position in SEND_ORDER {
+            let start = group_start + position * SEGMENT_SIZE;
+            if start < dataset.len() {
+                segments.push(segment_at(dataset, start, SEGMENT_SIZE));
+            }
+        }
+    }
     segments
 }
 
 /// The hot path under test. Create a new reassembler, insert all segments, and read out the data.
-fn hot_run(segments: &[Segment], capacity: usize, total_len: usize) {
-    let mut ra = Reassembler::new(ByteStream::new(capacity));
-    let mut out = Vec::with_capacity(total_len);
+fn run(segments: &[Segment], out: &mut Vec<u8>) {
+    let mut ra = Reassembler::new(ByteStream::new(CAPACITY));
     let mut buf = [0u8; 8192]; // Reusable buffer
+    out.clear();
 
     for seg in segments {
-        // Insert segment into reassembler
-        ra.insert(seg.start_idx, &seg.data, seg.is_last).unwrap();
+        ra.insert(seg.start_idx, seg.data, seg.is_last).unwrap();
 
         // Read out any available bytes into the out buffer
         loop {
-            match ra.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => out.extend_from_slice(&buf[..n]),
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
-                Err(e) => panic!("read error: {e:?}"),
+            let n = ra.read(&mut buf).unwrap();
+            if n == 0 {
+                break;
             }
+            out.extend_from_slice(&buf[..n]);
         }
     }
 
-    // Final drain in case the last insert unblocked a tail region
-    loop {
-        match ra.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => out.extend_from_slice(&buf[..n]),
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
-            Err(e) => panic!("final read error: {e:?}"),
-        }
-    }
-
-    // Debug sanity check
-    debug_assert!(
-        ra.get_output().eof(),
-        "ByteStream should be EOF after finishing"
-    );
-    debug_assert_eq!(out.len(), total_len, "Data length mismatch");
-}
-
-/// Validate the correctness of reassembler once, so we don't pollute the timing with repetitive checks.
-fn validate_once(segments: &[Segment], capacity: usize, dataset: &[u8]) {
-    let mut ra = Reassembler::new(ByteStream::new(capacity));
-    let mut out = Vec::with_capacity(dataset.len());
-    let mut buf = [0u8; 8192];
-
-    for seg in segments {
-        ra.insert(seg.start_idx, &seg.data, seg.is_last).unwrap();
-
-        loop {
-            match ra.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => out.extend_from_slice(&buf[..n]),
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
-                Err(e) => panic!("read error: {e:?}"),
-            }
-        }
-    }
-
-    loop {
-        match ra.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => out.extend_from_slice(&buf[..n]),
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
-            Err(e) => panic!("final read error: {e:?}"),
-        }
-    }
-
-    assert!(
-        ra.get_output().eof(),
-        "ByteStream should be EOF after finishing"
-    );
-    assert_eq!(out.len(), dataset.len(), "Data length mismatch");
-    assert_eq!(out, dataset, "Data content mismatch");
+    assert!(ra.output().eof(), "ByteStream should be EOF after finishing");
 }
 
 /// Criterion bench test
 fn bench_reassembler(c: &mut Criterion) {
-    let mut group = c.benchmark_group("reassembler");
-
-    group.sample_size(25);
-    group.measurement_time(Duration::from_secs(10));
-    group.sampling_mode(SamplingMode::Auto);
-
-    let dataset_sizes = [
-        8 * 1024 * 1024,  // 8 MB
-        32 * 1024 * 1024, // 32 MB
+    let dataset = gen_dataset();
+    let workloads = [
+        ("staggered_overlap", staggered_overlap(&dataset)),
+        ("gaps_then_fill", gaps_then_fill(&dataset)),
     ];
 
-    let capacities = [1500, 4096, 8192];
+    let mut group = c.benchmark_group("reassembler");
+    group.throughput(Throughput::Bytes(DATASET_SIZE as u64));
+    group.noise_threshold(0.05); // Run-to-run noise on a laptop is a few percent
 
-    for &dataset_size in &dataset_sizes {
-        for &capacity in &capacities {
-            let config = BenchConfig {
-                name: "Staggered overlap",
-                dataset_size,
-                capacity,
-                seed: 1370,
-            };
+    for (name, segments) in &workloads {
+        // Allocated once and reused, so the timing does not include growing the out buffer
+        let mut out = Vec::with_capacity(DATASET_SIZE);
 
-            // Generate the input data
-            let dataset = gen_dataset(config.dataset_size, config.seed);
-            let segments = build_segments(&dataset, config.capacity);
+        // Validate correctness once, so we don't pollute the timing with repetitive checks
+        run(segments, &mut out);
+        assert_eq!(out, dataset, "{name}: data content mismatch");
 
-            validate_once(&segments, config.capacity, &dataset);
-
-            // Friendly ID with a parameterized name and measurement value
-            let id = BenchmarkId::new(
-                format!(
-                    "{} bench with {} Bytes capacity",
-                    config.name, config.capacity
-                ),
-                format!("{} MB data", config.dataset_size / (1024 * 1024)),
-            );
-
-            group.throughput(Throughput::Bytes(config.dataset_size as u64));
-
-            // Register the benchmark case with the ID, bencher handle, and bench config
-            group.bench_with_input(id, &config, |bencher, config| {
-                bencher.iter(|| {
-                    hot_run(
-                        black_box(&segments),
-                        config.capacity,
-                        dataset.len()
-                    );
-                })
-            });
-        }
+        group.bench_function(*name, |bencher| {
+            bencher.iter(|| {
+                run(black_box(segments), &mut out);
+                black_box(&out);
+            })
+        });
     }
 
     group.finish()
