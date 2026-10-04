@@ -83,9 +83,11 @@ impl Read for ByteStream {
         let to_read = buf.len().min(self.buffer.len());
 
         if to_read > 0 {
-            // Make ring buffer contiguous if not already
-            let contiguous = self.buffer.make_contiguous();
-            buf[..to_read].copy_from_slice(&contiguous[..to_read]);
+            // Copy straight from the two halves of the ring buffer without rearranging it
+            let (front, back) = self.buffer.as_slices();
+            let from_front = to_read.min(front.len());
+            buf[..from_front].copy_from_slice(&front[..from_front]);
+            buf[from_front..to_read].copy_from_slice(&back[..to_read - from_front]);
             self.buffer.drain(..to_read);
             self.bytes_read += to_read;
             Ok(to_read)
