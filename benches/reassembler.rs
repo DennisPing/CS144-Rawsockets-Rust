@@ -35,15 +35,47 @@ fn segment_at(dataset: &[u8], start: usize, len: usize) -> Segment<'_> {
     }
 }
 
-/// Mostly in-order segments that overlap their neighbors and repeat bytes already received.
-fn staggered_overlap(dataset: &[u8]) -> Vec<Segment<'_>> {
+/// Baseline: every segment arrives exactly once and in order.
+fn in_order(dataset: &[u8]) -> Vec<Segment<'_>> {
     let mut segments = Vec::new();
-    for step in (0..dataset.len()).step_by(SEGMENT_SIZE) {
-        // Small offsets (+2, +0, +1) to induce overlap
-        for offset in [2, 0, 1] {
+    for start in (0..dataset.len()).step_by(SEGMENT_SIZE) {
+        segments.push(segment_at(dataset, start, SEGMENT_SIZE));
+    }
+    segments
+}
+
+/// Overlapping segments: two arrive early and overlap each other, one fills in, one is stale.
+///
+/// | Order | Offset | Range       | Test condition         |
+/// |-------|--------|-------------|--------------------------------------------|
+/// | 1     | S      | [S, 2S)     | Arrives early => stage                     |
+/// | 2     | S/2    | [S/2, 3S/2) | Arrives early => stage & merge overlapping |
+/// | 3     | 0      | [0, S)      | In order & overlap => trim and write out   |
+/// | 4     | S/4    | [S/4, 5S/4) | Entirely stale => drop                     |
+fn staggered_overlap(dataset: &[u8]) -> Vec<Segment<'_>> {
+    // Second half first; then a segment overlapping it; then the first half; then a duplicate
+    const OFFSETS: [usize; 4] = [
+        SEGMENT_SIZE,
+        SEGMENT_SIZE / 2,
+        0,
+        SEGMENT_SIZE / 4
+    ];
+
+    /*
+    bytes:       0         S/2       S         3S/2      2S
+                 ^         ^         ^         ^         ^
+    #1 early:                        [-------------------)     staged
+    #2 early:             [-------------------)                merged with #1
+    #3 in order: [-------------------)                         written, staged rest flushed
+    #4 stale:         [-------------------)                    dropped
+     */
+
+    let mut segments = Vec::new();
+    for step in (0..dataset.len()).step_by(2 * SEGMENT_SIZE) {
+        for offset in OFFSETS {
             let start = step + offset;
             if start < dataset.len() {
-                segments.push(segment_at(dataset, start, 2 * SEGMENT_SIZE));
+                segments.push(segment_at(dataset, start, SEGMENT_SIZE));
             }
         }
     }
@@ -68,52 +100,54 @@ fn gaps_then_fill(dataset: &[u8]) -> Vec<Segment<'_>> {
 }
 
 /// The hot path under test. Create a new reassembler, insert all segments, and read out the data.
-fn run(segments: &[Segment], out: &mut Vec<u8>) {
+/// Returns the reassembled bytes if `keep_output` is true, otherwise an empty `Vec`.
+fn run(segments: &[Segment], keep_output: bool) -> Vec<u8> {
     let mut ra = Reassembler::new(ByteStream::new(CAPACITY));
     let mut buf = [0u8; 8192]; // Reusable buffer
-    out.clear();
+    let mut out = Vec::new();
 
     for seg in segments {
         ra.insert(seg.start_idx, seg.data, seg.is_last).unwrap();
 
-        // Read out any available bytes into the out buffer
+        // Read out any available bytes
         loop {
             let n = ra.read(&mut buf).unwrap();
             if n == 0 {
                 break;
             }
-            out.extend_from_slice(&buf[..n]);
+            if keep_output {
+                out.extend_from_slice(&buf[..n]);
+            } else {
+                black_box(&buf[..n]);
+            }
         }
     }
 
     assert!(ra.output().eof(), "ByteStream should be EOF after finishing");
+    out
 }
 
 /// Criterion bench test
 fn bench_reassembler(c: &mut Criterion) {
     let dataset = gen_dataset();
     let workloads = [
+        ("in_order", in_order(&dataset)),
         ("staggered_overlap", staggered_overlap(&dataset)),
         ("gaps_then_fill", gaps_then_fill(&dataset)),
     ];
 
     let mut group = c.benchmark_group("reassembler");
     group.throughput(Throughput::Bytes(DATASET_SIZE as u64));
-    group.noise_threshold(0.05); // Run-to-run noise on a laptop is a few percent
+    group.noise_threshold(0.05); // Add 5% noise threshold to prevent false alarms
 
     for (name, segments) in &workloads {
-        // Allocated once and reused, so the timing does not include growing the out buffer
-        let mut out = Vec::with_capacity(DATASET_SIZE);
-
-        // Validate correctness once, so we don't pollute the timing with repetitive checks
-        run(segments, &mut out);
+        // 1. Validate the correctness once. Compare the out Vec with the original dataset.
+        let out = run(segments, true);
         assert_eq!(out, dataset, "{name}: data content mismatch");
 
+        // The timed hot runs only look at the bytes read out; they do not collect them
         group.bench_function(*name, |bencher| {
-            bencher.iter(|| {
-                run(black_box(segments), &mut out);
-                black_box(&out);
-            })
+            bencher.iter(|| run(black_box(segments), false))
         });
     }
 
