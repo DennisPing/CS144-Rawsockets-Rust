@@ -66,7 +66,7 @@ fn staggered_overlap(dataset: &[u8]) -> Vec<Segment<'_>> {
                  ^         ^         ^         ^         ^
     #1 early:                        [-------------------)     staged
     #2 early:             [-------------------)                merged with #1
-    #3 in order: [-------------------)                         written, staged rest flushed
+    #3 in order: [-------------------)                         written out, staged is flushed
     #4 stale:         [-------------------)                    dropped
      */
 
@@ -82,10 +82,35 @@ fn staggered_overlap(dataset: &[u8]) -> Vec<Segment<'_>> {
     segments
 }
 
-/// Out-of-order segments in groups of 8, sent so that gaps open up and are then filled in.
+/// Out-of-order segments: 4 segments arrive early and leave gaps, 3 segments bridge the gaps,
+/// last 1 segment completes the dataset.
+///
+/// | Order | Idx      | Range    | Test condition                               |
+/// |-------|----------|----------|----------------------------------------------|
+/// | 1     | 1        | [S, 2S)  | Arrives early => stage 1st range             |
+/// | 2     | 3        | [3S, 4S) | Arrives early => stage 2nd range             |
+/// | 3     | 5        | [5S, 6S) | Arrives early => stage 3rd range             |
+/// | 4     | 7        | [7S, 8S) | Arrives early => stage 4th range             |
+/// | 5     | 6        | [6S, 7S) | Touches a range on each side => merge all 3  |
+/// | 6     | 4        | [4S, 5S) | Touches a range on each side => merge all 3  |
+/// | 7     | 2        | [2S, 3S) | Touches a range on each side => merge all 3  |
+/// | 8     | 0        | [0, S)   | In order => write out and flush staged range |
 fn gaps_then_fill(dataset: &[u8]) -> Vec<Segment<'_>> {
-    // 1, 3, 5, 7 leave four separate ranges; 6, 4, 2 each join two ranges; 0 fills the last gap
+    // Odd positions first to open four gaps; then even positions, highest first, to close them
     const SEND_ORDER: [usize; 8] = [1, 3, 5, 7, 6, 4, 2, 0];
+
+    /*
+    bytes:       0    S    2S   3S   4S   5S   6S   7S   8S
+                 ^    ^    ^    ^    ^    ^    ^    ^    ^
+    #1 early:         [----)                                   staged, 1 range
+    #2 early:                   [----)                         staged, 2 ranges
+    #3 early:                             [----)               staged, 3 ranges
+    #4 early:                                       [----)     staged, 4 ranges
+    #5 bridge:                                 [----)          joins #3 and #4, 3 ranges
+    #6 bridge:                       [----)                    joins #2 and #3, 2 ranges
+    #7 bridge:             [----)                              joins #1 and #2, 1 range
+    #8 in order: [----)                                        written out, staged range is flushed
+     */
 
     let mut segments = Vec::new();
     for group_start in (0..dataset.len()).step_by(SEND_ORDER.len() * SEGMENT_SIZE) {
@@ -138,7 +163,7 @@ fn bench_reassembler(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("reassembler");
     group.throughput(Throughput::Bytes(DATASET_SIZE as u64));
-    group.noise_threshold(0.05); // Add 5% noise threshold to prevent false alarms
+    group.noise_threshold(0.02); // Add 2% noise threshold to prevent false alarms
 
     for (name, segments) in &workloads {
         // 1. Validate the correctness once. Compare the out Vec with the original dataset.
